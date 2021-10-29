@@ -41,6 +41,22 @@ from bpy_extras.io_utils import ExportHelper
 
 
 class ExportModelBase:
+    class Model:
+        def __init__(self):
+            self.node = ExportModelBase.Node()
+            self.materials = {}
+            self.mesh = None
+
+    class Node:
+        def __init__(self):
+            self.children = []
+
+    class Material:
+        pass
+
+    class Mesh:
+        pass
+
     def check(self, context):
         import os
         old_filepath = self.filepath
@@ -66,22 +82,40 @@ class ExportModelBase:
         self.check(context)
         context.window_manager.progress_begin(0, 100)
         context.window_manager.progress_update(0)
-        scene = bpy.data.scenes[bpy.context.scene.name]
-        node = [o for o in bpy.data.scenes[0].objects if o.proxy is None and o.parent is None][0]
-        print(node.keys())
-        self.process_node(node)
+        self.model = ExportModelBase.Model()
+        bpy_scene = bpy.data.scenes[bpy.context.scene.name]
+        bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None][0]
+        props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) == str])
+        self.model.distances = [int(props.get('lod%s' % i, 0)) for i in range(4)]
+        self.gather_node(bpy_node, self.model.node)
+        print(self.model.distances)
+        print(list(self.model.materials.keys()))
+        self.debug_node(0, self.model.node)
         context.window_manager.progress_end()
         return {'FINISHED'}
 
-    def process_node(self, node):
+    def gather_node(self, bpy_node, node):
         import re
-        name = re.sub(r'\.\d+$', '', node.name)
-        if node.type == 'EMPTY':
-            print('%s %s' % (node.type, name))
-        if node.type == 'MESH':
-            print('%s %s %s' % (node.type, name, node.material_slots.keys()))
+        name = re.sub(r'\.\d+$', '', bpy_node.name)
+        if bpy_node.type in ['EMPTY', 'MESH']:
+            if False in [s == 1.0 for s in bpy_node.scale]:
+                raise RuntimeError('Apply scale to all objects in scene before exporting')
+            node.name = name
+            node.position = list(bpy_node.location)
+            node.orientation = list(bpy_node.rotation_quaternion)
+            if bpy_node.type == 'MESH':
+                node.mesh = ExportModelBase.Mesh()
+                for slot in bpy_node.material_slots.keys():
+                    self.model.materials[slot] = ExportModelBase.Material()
+        for bpy_child in bpy_node.children:
+            child = ExportModelBase.Node()
+            self.gather_node(bpy_child, child)
+            node.children.append(child)
+
+    def debug_node(self, level, node):
+        print('%s%s' % (level * 2 * ' ', node.name))
         for child in node.children:
-            self.process_node(child)
+            self.debug_node(level + 1, child)
 
 
 class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
