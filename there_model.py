@@ -1,6 +1,9 @@
 import os
 import re
 import math
+import copy
+import enum
+import socket
 import operator
 import bpy
 from bpy_extras.io_utils import ExportHelper
@@ -44,29 +47,48 @@ if 'bpy' in locals():
 
 class ExportModelBase:
     class Model:
+        class Marker:
+            def __init__(self, position=-1, mask=0):
+                self.position = position
+                self.mask = mask
+
+            def clone(self):
+                return copy.copy(self)
+
         def __init__(self):
             self.nodes = []
             self.materials = {}
 
         def save(self, path):
             self.data = bytearray()
-            self.mask = 0
+            self.marker = ExportModelBase.Model.Marker()
             self.store_header()
             with open(path, 'wb') as file:
                 file.write(self.data)
 
         def align(self):
-            self.mask = 0
+            self.marker.mask = 0
+
+        def seek(self, marker=None, offset=None):
+            origin_marker = self.marker.clone()
+            if marker is not None:
+                self.marker.position = marker.position
+                self.marker.mask = marker.mask
+            if offset is not None:
+                self.marker.position += offset
+            return origin_marker
 
         def store(self, value, width):
             mask = pow(2, width - 1)
             while mask > 0:
-                if self.mask == 0:
-                    self.data += b'\0'
-                    self.mask = 128
+                if self.marker.mask == 0:
+                    self.marker.position += 1
+                    self.marker.mask = 128
+                    while self.marker.position >= len(self.data):
+                        self.data += b'\0'
                 if value & mask != 0:
-                    self.data[-1] |= self.mask
-                self.mask >>= 1
+                    self.data[self.marker.position] |= self.marker.mask
+                self.marker.mask >>= 1
                 mask >>= 1
 
         def store_text(self, value, width, length=None, end=None):
@@ -142,7 +164,7 @@ class ExportModelBase:
             self.align()
             self.store_uint(0xffff0080, width=32)
             self.align()
-            self.store_int(0, end=256)
+            self.store_int(len(self.materials), end=256)
             self.store_int(1, width=32)
             self.store_int(1, width=32)
             self.store_int(1, width=32)
@@ -154,9 +176,68 @@ class ExportModelBase:
             self.store_components()
             self.store_families()
 
-        def store_materials(self, count=0):
-            self.store_uint(2, width=8)
-            self.store_uint(0, width=8)
+        def store_materials(self):
+            marker1 = self.seek(offset=2)
+            for name, material in self.materials.items():
+                marker3 = self.seek(offset=2)
+                self.store_text(name, width=7, end=32)
+                self.store_int(2, width=8)
+                self.store_int(1, width=8)
+                bool_mask = 1
+                self.store_uint(bool_mask, width=16)
+                float_mask = 0
+                self.store_uint(float_mask, width=16)
+                color_mask = 0
+                self.store_uint(color_mask, width=16)
+                map_mask = 0
+                if 'color' in material.maps:
+                    map_mask |= 1 << 0
+                if 'opacity' in material.maps:
+                    map_mask |= 1 << 1
+                elif 'cutout' in material.maps:
+                    map_mask |= 1 << 2
+                if 'lighting' in material.maps or 'detail' in material.maps:
+                    map_mask |= 1 << 3
+                if 'gloss' in material.maps:
+                    map_mask |= 1 << 4
+                if 'emission' in material.maps:
+                    map_mask |= 1 << 5
+                if 'normal' in material.maps:
+                    map_mask |= 1 << 6
+                self.store_uint(map_mask, width=16)
+                bool_values = 0
+                if material.is_lit:
+                    bool_values |= 1 << 0
+                if material.is_two_sided:
+                    bool_values |= 1 << 1
+                if 'lighting' in material.maps:
+                    bool_values |= 1 << 6
+                self.store_uint(bool_values, width=16)
+                if 'color' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                if 'opacity' in material.maps:
+                    self.store_text('cm/t555cmxx_devdefault.jpg', width=7, end=48)
+                elif 'cutout' in material.maps:
+                    self.store_text('cm/t555cmyy_devdefault.png', width=7, end=48)
+                if 'lighting' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                elif 'detail' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                if 'gloss' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                if 'emission' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                if 'normal' in material.maps:
+                    self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
+                int_mask = 0
+                self.store_uint(int_mask, width=16)
+                self.align()
+                marker4 = self.seek(marker=marker3)
+                self.store_uint(socket.htons(marker4.position - marker3.position), width=16)
+                self.seek(marker=marker4)
+            marker2 = self.seek(marker=marker1)
+            self.store_uint(socket.htons(marker2.position - marker1.position), width=16)
+            self.seek(marker=marker2)
 
         def store_nodes(self):
             for node in self.nodes[1:]:
@@ -208,7 +289,19 @@ class ExportModelBase:
             self.parent_index = None
 
     class Material:
-        pass
+        def __init__(self):
+            self.is_lit = True
+            self.is_two_sided = False
+            self.maps = {
+                'color': 'color.png',
+                #'opacity': 'opacity.jpg',
+                #'cutout': 'cutout.png',
+                #'lighting': 'lighting.png',
+                #'detail': 'detail.png',
+                #'gloss': 'gloss.png',
+                #'emission': 'emission.png',
+                #'normal': 'normal.png',
+            }
 
     class Mesh:
         pass
