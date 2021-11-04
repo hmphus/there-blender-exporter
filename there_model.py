@@ -1,3 +1,11 @@
+import os
+import re
+import math
+import operator
+import bpy
+from bpy_extras.io_utils import ExportHelper
+
+
 bl_info = {
     'name': 'There Model format',
     'author': 'Brian Gontowski',
@@ -32,14 +40,6 @@ def reload_package(module_dict_main):
 
 if 'bpy' in locals():
     reload_package(locals())
-
-
-import os
-import re
-import math
-import operator
-import bpy
-from bpy_extras.io_utils import ExportHelper
 
 
 class ExportModelBase:
@@ -101,7 +101,7 @@ class ExportModelBase:
                 width = int(math.ceil(math.log((end - start) / step, 2.0)))
             elif end > start:
                 step = (end - start) / (math.pow(2.0, float(width)) - 1.0)
-            self.store(int(round((value - start) / step)), width=width)
+            self.store(round((value - start) / step), width=width)
 
         def store_header(self):
             self.store_text('SOM ', width=8, length=4)
@@ -170,7 +170,8 @@ class ExportModelBase:
             for node in self.nodes:
                 values = [v * v for v in node.orientation[1:]]
                 index = values.index(max(values))
-                values = [node.orientation[i] for i in range(4) if i != index + 1]
+                sign = -1.0 if node.orientation[index + 1] < 0.0 else 1.0
+                values = [node.orientation[i] * sign for i in range(4) if i != index + 1]
                 self.store_int(index, width=2)
                 self.store_float(values[0], width=24, start=-1.0, end=1.0)
                 self.store_float(values[1], width=23, start=-1.0, end=1.0)
@@ -193,7 +194,7 @@ class ExportModelBase:
 
         def store_families(self, count1=1, count2=1):
             for i1 in range(count1):
-                self.store_float(100.0, width=32, start=0.0, end=100000.0)
+                self.store_float(float(self.distances[i1]), width=32, start=0.0, end=100000.0)
                 for i2 in range(count2):
                     self.store_uint(0, width=32)
             self.align()
@@ -240,7 +241,12 @@ class ExportModelBase:
         bpy_scene = bpy.data.scenes[bpy.context.scene.name]
         bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None][0]
         props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) == str])
-        self.model.distances = [int(props.get('lod%s' % i, 0)) for i in range(4)]
+        self.model.distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
+        if self.model.distances[0] < 1:
+            self.model.distances[0] = 1
+        for i in range(1, 4):
+            if self.model.distances[i - 1] >= self.model.distances[i]:
+                self.model.distances[i] = round(self.model.distances[i - 1] * 1.5)
         self.model.nodes.append(self.gather_nodes(bpy_node))
         assert self.model.nodes[0] is not None
         self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
@@ -255,8 +261,8 @@ class ExportModelBase:
             raise RuntimeError('Apply scale to all objects in scene before exporting')
         node = ExportModelBase.Node()
         node.name = re.sub(r'\.\d+$', '', bpy_node.name)
-        node.position = list(bpy_node.location)
-        node.orientation = list(bpy_node.rotation_quaternion)
+        node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
+        node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
         if bpy_node.type == 'MESH':
             node.mesh = ExportModelBase.Mesh()
             node.mesh.vertices = bpy_node.data.vertices
