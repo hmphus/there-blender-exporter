@@ -178,9 +178,9 @@ class ExportModelBase:
 
         def store_materials(self):
             marker1 = self.seek(offset=2)
-            for name, material in self.materials.items():
+            for material in self.materials:
                 marker3 = self.seek(offset=2)
-                self.store_text(name, width=7, end=32)
+                self.store_text(material.name, width=7, end=32)
                 self.store_int(2, width=8)
                 self.store_int(1, width=8)
                 bool_mask = 1
@@ -190,19 +190,19 @@ class ExportModelBase:
                 color_mask = 0
                 self.store_uint(color_mask, width=16)
                 map_mask = 0
-                if 'color' in material.maps:
+                if 'color' in material.textures:
                     map_mask |= 1 << 0
-                if 'opacity' in material.maps:
+                if 'opacity' in material.textures:
                     map_mask |= 1 << 1
-                elif 'cutout' in material.maps:
+                elif 'cutout' in material.textures:
                     map_mask |= 1 << 2
-                if 'lighting' in material.maps or 'detail' in material.maps:
+                if 'lighting' in material.textures or 'detail' in material.textures:
                     map_mask |= 1 << 3
-                if 'gloss' in material.maps:
+                if 'gloss' in material.textures:
                     map_mask |= 1 << 4
-                if 'emission' in material.maps:
+                if 'emission' in material.textures:
                     map_mask |= 1 << 5
-                if 'normal' in material.maps:
+                if 'normal' in material.textures:
                     map_mask |= 1 << 6
                 self.store_uint(map_mask, width=16)
                 bool_values = 0
@@ -210,24 +210,24 @@ class ExportModelBase:
                     bool_values |= 1 << 0
                 if material.is_two_sided:
                     bool_values |= 1 << 1
-                if 'lighting' in material.maps:
+                if 'lighting' in material.textures:
                     bool_values |= 1 << 6
                 self.store_uint(bool_values, width=16)
-                if 'color' in material.maps:
+                if 'color' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
-                if 'opacity' in material.maps:
+                if 'opacity' in material.textures:
                     self.store_text('cm/t555cmxx_devdefault.jpg', width=7, end=48)
-                elif 'cutout' in material.maps:
+                elif 'cutout' in material.textures:
                     self.store_text('cm/t555cmyy_devdefault.png', width=7, end=48)
-                if 'lighting' in material.maps:
+                if 'lighting' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
-                elif 'detail' in material.maps:
+                elif 'detail' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
-                if 'gloss' in material.maps:
+                if 'gloss' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
-                if 'emission' in material.maps:
+                if 'emission' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
-                if 'normal' in material.maps:
+                if 'normal' in material.textures:
                     self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
                 int_mask = 0
                 self.store_uint(int_mask, width=16)
@@ -281,7 +281,8 @@ class ExportModelBase:
             self.align()
 
     class Node:
-        def __init__(self):
+        def __init__(self, name):
+            self.name = name
             self.index = None
             self.mesh = None
             self.children = []
@@ -289,19 +290,11 @@ class ExportModelBase:
             self.parent_index = None
 
     class Material:
-        def __init__(self):
+        def __init__(self, name):
+            self.name = name
             self.is_lit = True
             self.is_two_sided = False
-            self.maps = {
-                'color': 'color.png',
-                #'opacity': 'opacity.jpg',
-                #'cutout': 'cutout.png',
-                #'lighting': 'lighting.png',
-                #'detail': 'detail.png',
-                #'gloss': 'gloss.png',
-                #'emission': 'emission.png',
-                #'normal': 'normal.png',
-            }
+            self.textures = {}
 
     class Mesh:
         pass
@@ -333,27 +326,30 @@ class ExportModelBase:
         self.model = ExportModelBase.Model()
         bpy_scene = bpy.data.scenes[bpy.context.scene.name]
         bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None][0]
-        props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) == str])
-        self.model.distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
+        self.gather_properties(bpy_node)
+        self.model.nodes.append(self.gather_nodes(bpy_node))
+        assert self.model.nodes[0] is not None
+        self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
+        self.gather_materials()
+        self.model.save(self.filepath)
+        context.window_manager.progress_end()
+        return {'FINISHED'}
+
+    def gather_properties(self, bpy_node):
+        props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) in [str, int, float]])
+        self.model.distances = [int(props.get('therelod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
         if self.model.distances[0] < 1:
             self.model.distances[0] = 1
         for i in range(1, 4):
             if self.model.distances[i - 1] >= self.model.distances[i]:
                 self.model.distances[i] = round(self.model.distances[i - 1] * 1.5)
-        self.model.nodes.append(self.gather_nodes(bpy_node))
-        assert self.model.nodes[0] is not None
-        self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
-        self.model.save(self.filepath)
-        context.window_manager.progress_end()
-        return {'FINISHED'}
 
     def gather_nodes(self, bpy_node):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
         if False in [s == 1.0 for s in bpy_node.scale]:
-            raise RuntimeError('Apply scale to all objects in scene before exporting')
-        node = ExportModelBase.Node()
-        node.name = re.sub(r'\.\d+$', '', bpy_node.name)
+            raise RuntimeError('Apply scale to all objects in scene before exporting.')
+        node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
         node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
         if bpy_node.type == 'MESH':
@@ -362,8 +358,8 @@ class ExportModelBase:
             node.mesh.uv_layers = bpy_node.data.uv_layers
             node.mesh.vertex_colors = bpy_node.data.vertex_colors
             node.mesh.polygons = bpy_node.data.polygons
-            for slot in bpy_node.material_slots.keys():
-                self.model.materials[slot] = ExportModelBase.Material()
+            for name in bpy_node.material_slots.keys():
+                self.model.materials[name] = ExportModelBase.Material(name=name)
         for bpy_child in bpy_node.children:
             child = self.gather_nodes(bpy_child)
             if child is not None:
@@ -385,6 +381,57 @@ class ExportModelBase:
         self.model.nodes.append(node)
         for child in node.children:
             self.flatten_nodes(child, node.index)
+
+    def gather_materials(self):
+        self.model.materials = list(self.model.materials.values())
+        for material in self.model.materials:
+            bpy_material = bpy.data.materials[material.name]
+            material.is_two_sided = not bpy_material.use_backface_culling
+            material.is_lit = True
+            color_texture = self.gather_texture(bpy_material, 'Base Color')
+            emission_texture = self.gather_texture(bpy_material, 'Emission')
+            alpha_texture = self.gather_texture(bpy_material, 'Alpha')
+            if color_texture is not None:
+                material.textures['color'] = color_texture
+                if emission_texture is not None:
+                    material.textures['emission'] = emission_texture
+            else:
+                if emission_texture is not None:
+                    material.textures['color'] = emission_texture
+                    material.is_lit = False
+                else:
+                    raise RuntimeError('Add a base color or emission image to the "%s" material.' % material.name)
+            if bpy_material.blend_method == 'CLIP':
+                if alpha_texture is not None:
+                    material.textures['cutout'] = alpha_texture
+                else:
+                    raise RuntimeError('Add an alpha image to the "%s" material or set its blend mode to opaque.' % material.name)
+            elif bpy_material.blend_method == 'BLEND':
+                if alpha_texture is not None:
+                    material.textures['opacity'] = alpha_texture
+                else:
+                    raise RuntimeError('Add an alpha image to the "%s" material or set its blend mode to opaque.' % material.name)
+            # TODO: Add lighting, detail, gloss, and normal textures
+
+    def gather_texture(self, bpy_material, name):
+        if not bpy_material.use_nodes:
+            return None
+        bpy_node = bpy_material.node_tree.nodes.get('Principled BSDF')
+        if bpy_node is None:
+            return None
+        bpy_input = bpy_node.inputs.get(name)
+        if bpy_input is None:
+            return None
+        if not bpy_input.is_linked:
+            return None
+        if bpy_input.is_multi_input:
+            return None
+        bpy_link = bpy_input.links[0]
+        if bpy_link.from_node.type != 'TEX_IMAGE':
+            return None
+        if bpy_link.from_node.image is None:
+            return None
+        return bpy_link.from_node.image.name
 
 
 class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
