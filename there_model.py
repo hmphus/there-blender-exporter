@@ -58,6 +58,7 @@ class ExportModelBase:
         def __init__(self):
             self.nodes = []
             self.materials = {}
+            self.collision = None
 
         def save(self, path):
             self.data = bytearray()
@@ -262,9 +263,27 @@ class ExportModelBase:
                 self.store_text(node.name, width=7, end=40)
                 self.align()
 
-        def store_collisions(self, count=0):
+        def store_collisions(self):
             self.store_uint(1, width=16)
-            self.store_uint(count, width=32)
+            if self.collision is None:
+                self.store_uint(0, width=32)
+            else:
+                self.store_uint(1, width=32)
+                self.store_uint(len(self.collision.mesh.vertices), width=16)
+                self.store_uint(len(self.collision.mesh.polygons), width=16)
+                self.store_uint(sum([len(p) for p in self.collision.mesh.polygons]), width=32)
+                self.store_uint(0, width=32)
+                self.store_float(self.collision.position[0], width=32, start=-2000000.0, end=2000000.0)
+                self.store_float(self.collision.position[1], width=32, start=-2000000.0, end=2000000.0)
+                self.store_float(self.collision.position[2], width=32, start=-2000000.0, end=2000000.0)
+                for vertex in self.collision.mesh.vertices:
+                    self.store_float(vertex[0], width=32, start=-2000000.0, end=2000000.0)
+                    self.store_float(vertex[1], width=32, start=-2000000.0, end=2000000.0)
+                    self.store_float(vertex[2], width=32, start=-2000000.0, end=2000000.0)
+                for polygon in self.collision.mesh.polygons:
+                    self.store_uint(len(polygon), width=8)
+                    for index in polygon:
+                        self.store_uint(index, width=16)
             self.align()
 
         def store_components(self, count=1):
@@ -344,7 +363,7 @@ class ExportModelBase:
             if self.model.distances[i - 1] >= self.model.distances[i]:
                 self.model.distances[i] = round(self.model.distances[i - 1] * 1.5)
 
-    def gather_nodes(self, bpy_node):
+    def gather_nodes(self, bpy_node, level=0):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
         if False in [s == 1.0 for s in bpy_node.scale]:
@@ -352,16 +371,23 @@ class ExportModelBase:
         node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
         node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
+        is_collision = (level == 1 and node.name.lower() == 'col')
         if bpy_node.type == 'MESH':
             node.mesh = ExportModelBase.Mesh()
-            node.mesh.vertices = bpy_node.data.vertices
-            node.mesh.uv_layers = bpy_node.data.uv_layers
-            node.mesh.vertex_colors = bpy_node.data.vertex_colors
-            node.mesh.polygons = bpy_node.data.polygons
-            for name in bpy_node.material_slots.keys():
-                self.model.materials[name] = ExportModelBase.Material(name=name)
+            node.mesh.vertices = [list(v.co) for v in bpy_node.data.vertices]
+            node.mesh.polygons = [list(p.vertices) for p in bpy_node.data.polygons]
+            if is_collision:
+                self.model.collision = node
+            else:
+                node.mesh.normals = [list(v.normal) for v in bpy_node.data.vertices]
+                #node.mesh.uv_layers = bpy_node.data.uv_layers
+                #node.mesh.vertex_colors = bpy_node.data.vertex_colors
+                for name in bpy_node.material_slots.keys():
+                    self.model.materials[name] = ExportModelBase.Material(name=name)
+        if is_collision:
+            return None
         for bpy_child in bpy_node.children:
-            child = self.gather_nodes(bpy_child)
+            child = self.gather_nodes(bpy_child, level=level + 1)
             if child is not None:
                 node.children.append(child)
                 if child.mesh is not None:
