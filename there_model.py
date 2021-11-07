@@ -107,7 +107,7 @@ class ExportModelBase:
             value = self.store_uint(1 if value else 0, width=1)
 
         def store_int(self, value, width=0, start=0, end=0, step=1):
-            assert value >= 0
+            assert value >= 0, 'Only positive integers are supported.'
             self.store_uint(value, width=width, start=start, end=end, step=step)
 
         def store_uint(self, value, width=0, start=0, end=0, step=1):
@@ -115,8 +115,8 @@ class ExportModelBase:
                 width = int(math.ceil(math.log((float(end) - float(start) + 1.0) / float(step), 2.0)))
             elif end > start:
                 step = int((float(end) - float(start)) / (math.pow(2.0, float(width)) - 1.0))
-            assert start == 0
-            assert step == 1
+            assert start == 0, 'The start argument is invalid.'
+            assert step == 1, 'The step argument is invalid.'
             self.store(value, width=width)
 
         def store_float(self, value, width=0, start=0.0, end=0.0, step=1.0):
@@ -341,22 +341,29 @@ class ExportModelBase:
     def execute(self, context):
         self.check(context)
         context.window_manager.progress_begin(0, 100)
-        context.window_manager.progress_update(0)
-        self.model = ExportModelBase.Model()
-        bpy_scene = bpy.data.scenes[bpy.context.scene.name]
-        bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None][0]
-        self.gather_properties(bpy_node)
-        self.model.nodes.append(self.gather_nodes(bpy_node))
-        assert self.model.nodes[0] is not None
-        self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
-        self.gather_materials()
-        self.model.save(self.filepath)
+        try:
+            context.window_manager.progress_update(0)
+            self.model = ExportModelBase.Model()
+            bpy_scene = bpy.data.scenes[bpy.context.scene.name]
+            bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
+            self.gather_properties(bpy_node)
+            self.model.nodes.append(self.gather_nodes(bpy_node))
+            assert self.model.nodes[0] is not None, 'The root note was not found.'
+            context.window_manager.progress_update(25)
+            self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
+            self.gather_materials()
+            context.window_manager.progress_update(50)
+            self.model.save(self.filepath)
+            context.window_manager.progress_update(100)
+        except (RuntimeError, AssertionError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
         context.window_manager.progress_end()
         return {'FINISHED'}
 
     def gather_properties(self, bpy_node):
         props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) in [str, int, float]])
-        self.model.distances = [int(props.get('therelod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
+        self.model.distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
         if self.model.distances[0] < 1:
             self.model.distances[0] = 1
         for i in range(1, 4):
@@ -366,17 +373,21 @@ class ExportModelBase:
     def gather_nodes(self, bpy_node, level=0):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
-        if False in [s == 1.0 for s in bpy_node.scale]:
+        if not self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]):
             raise RuntimeError('Apply scale to all objects in scene before exporting.')
         node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
         node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
+        if level == 0 and not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
+            raise RuntimeError('Apply rotation to root node in scene before exporting.')
         is_collision = (level == 1 and node.name.lower() == 'col')
         if bpy_node.type == 'MESH':
             node.mesh = ExportModelBase.Mesh()
-            node.mesh.vertices = [list(v.co) for v in bpy_node.data.vertices]
+            node.mesh.vertices = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
             node.mesh.polygons = [list(p.vertices) for p in bpy_node.data.polygons]
             if is_collision:
+                if not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
+                    raise RuntimeError('Apply rotation to collision in scene before exporting.')
                 self.model.collision = node
             else:
                 node.mesh.normals = [list(v.normal) for v in bpy_node.data.vertices]
@@ -458,6 +469,9 @@ class ExportModelBase:
         if bpy_link.from_node.image is None:
             return None
         return bpy_link.from_node.image.name
+
+    def is_close(self, a, b):
+        return False not in [math.isclose(a[i], b[i], abs_tol=0.00001) for i in range(len(a))]
 
 
 class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
