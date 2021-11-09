@@ -2,9 +2,9 @@ import os
 import re
 import math
 import copy
-import enum
 import socket
 import operator
+import mathutils
 import bpy
 from bpy_extras.io_utils import ExportHelper
 
@@ -344,8 +344,11 @@ class ExportModelBase:
         try:
             context.window_manager.progress_update(0)
             self.model = ExportModelBase.Model()
-            bpy_scene = bpy.data.scenes[bpy.context.scene.name]
-            bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
+            try:
+                bpy_scene = bpy.data.scenes[bpy.context.scene.name]
+                bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
+            except IndexError:
+                raise RuntimeError('The root note was not found.')
             self.gather_properties(bpy_node)
             self.model.nodes.append(self.gather_nodes(bpy_node))
             assert self.model.nodes[0] is not None, 'The root note was not found.'
@@ -373,23 +376,36 @@ class ExportModelBase:
     def gather_nodes(self, bpy_node, level=0):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
+        node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
+        is_collision = (level == 1 and node.name.lower() == 'col')
+        bpy_active = bpy.context.view_layer.objects.active
+        bpy.context.view_layer.objects.active = bpy_node
+        if is_collision:
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True, properties=False)
+        else:
+            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
+        bpy.context.view_layer.objects.active = bpy_active
         if not self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]):
             raise RuntimeError('Apply scale to all objects in scene before exporting.')
-        node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
-        node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
+        if bpy_node.rotation_mode == 'QUATERNION':
+            node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
+        else:
+            node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
         if level == 0 and not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
             raise RuntimeError('Apply rotation to root node in scene before exporting.')
-        is_collision = (level == 1 and node.name.lower() == 'col')
         if bpy_node.type == 'MESH':
             node.mesh = ExportModelBase.Mesh()
             node.mesh.vertices = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
-            node.mesh.polygons = [list(p.vertices) for p in bpy_node.data.polygons]
             if is_collision:
+                if not self.is_close(node.position, [0.0, 0.0, 0.0]):
+                    raise RuntimeError('Apply location to collision in scene before exporting.')
                 if not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
                     raise RuntimeError('Apply rotation to collision in scene before exporting.')
+                node.mesh.polygons = self.optimize_collision(bpy_node.data.polygons)
                 self.model.collision = node
             else:
+                node.mesh.polygons = [list(p.vertices) for p in bpy_node.data.polygons]
                 node.mesh.normals = [list(v.normal) for v in bpy_node.data.vertices]
                 #node.mesh.uv_layers = bpy_node.data.uv_layers
                 #node.mesh.vertex_colors = bpy_node.data.vertex_colors
@@ -469,6 +485,46 @@ class ExportModelBase:
         if bpy_link.from_node.image is None:
             return None
         return bpy_link.from_node.image.name
+
+    def optimize_collision(self, bpy_polygons):
+        assert True not in [len(p.vertices) > 4 for p in bpy_polygons], 'The collision mesh must be triangulated.'
+        normal_groups = []
+        normal_grouped = [False] * len(bpy_polygons)
+        for i1 in range(len(bpy_polygons)):
+            if normal_grouped[i1]:
+                continue
+            normal_group = [i1]
+            normal_grouped[i1] = True
+            for i2 in range(i1 + 1, len(bpy_polygons)):
+                if math.isclose(bpy_polygons[i1].normal.dot(bpy_polygons[i2].normal), 1.0, abs_tol=0.001):
+                    normal_group.append(i2)
+                    normal_grouped[i2] = True
+            normal_groups.append(normal_group)
+        polygon_groups = []
+        for normal_group in normal_groups:
+            polygon_grouped = [False] * len(normal_group)
+            for i1 in range(len(normal_group)):
+                if polygon_grouped[i1]:
+                    continue
+                vertices1 = list(bpy_polygons[normal_group[i1]].vertices)
+                polygon_grouped[i1] = True
+                for i2 in range(i1 + 1, len(normal_group)):
+                    vertices2 = list(bpy_polygons[normal_group[i2]].vertices)
+                    if len(vertices2) > 3:
+                        continue
+                    vertices3 = [v for v in vertices2 if v not in vertices1]
+                    if len(vertices3) == 1:
+                        vertices2.remove(vertices3[0])
+                        for i3 in range(len(vertices1)):
+                            if vertices1[0] in vertices2 and vertices1[-1] in vertices2:
+                                vertices1 = vertices1 + vertices3
+                                polygon_grouped[i2] = True
+                                break
+                            if len(vertices1) > 3:
+                                break
+                            vertices1.append(vertices1.pop(0))
+                polygon_groups.append(vertices1)
+        return polygon_groups
 
     def is_close(self, a, b):
         return False not in [math.isclose(a[i], b[i], abs_tol=0.00001) for i in range(len(a))]
