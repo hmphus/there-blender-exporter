@@ -4,7 +4,6 @@ import math
 import copy
 import socket
 import operator
-import mathutils
 import bpy
 from bpy_extras.io_utils import ExportHelper
 
@@ -46,7 +45,7 @@ if 'bpy' in locals():
 
 
 class ExportModelBase:
-    class Model:
+    class ThereModel:
         class Marker:
             def __init__(self, position=-1, mask=0):
                 self.position = position
@@ -56,13 +55,15 @@ class ExportModelBase:
                 return copy.copy(self)
 
         def __init__(self):
+            self.lods = None
             self.nodes = []
             self.materials = {}
             self.collision = None
 
         def save(self, path):
+            assert type(self.materials) == list, 'The materials were not flattened.'
             self.data = bytearray()
-            self.marker = ExportModelBase.Model.Marker()
+            self.marker = ExportModelBase.ThereModel.Marker()
             self.store_header()
             with open(path, 'wb') as file:
                 file.write(self.data)
@@ -166,8 +167,8 @@ class ExportModelBase:
             self.store_uint(0xffff0080, width=32)
             self.align()
             self.store_int(len(self.materials), end=256)
-            self.store_int(1, width=32)
-            self.store_int(1, width=32)
+            self.store_int(len(self.lods), width=32)
+            self.store_int(len(self.lods), width=32)
             self.store_int(1, width=32)
             self.store_int(len(self.nodes) - 1, width=32)
             self.align()
@@ -269,54 +270,87 @@ class ExportModelBase:
                 self.store_uint(0, width=32)
             else:
                 self.store_uint(1, width=32)
-                self.store_uint(len(self.collision.mesh.vertices), width=16)
-                self.store_uint(len(self.collision.mesh.polygons), width=16)
-                self.store_uint(sum([len(p) for p in self.collision.mesh.polygons]), width=32)
+                self.store_uint(len(self.collision.vertices), width=16)
+                self.store_uint(len(self.collision.polygons), width=16)
+                self.store_uint(sum([len(p) for p in self.collision.polygons]), width=32)
                 self.store_uint(0, width=32)
-                self.store_float(self.collision.position[0], width=32, start=-2000000.0, end=2000000.0)
-                self.store_float(self.collision.position[1], width=32, start=-2000000.0, end=2000000.0)
-                self.store_float(self.collision.position[2], width=32, start=-2000000.0, end=2000000.0)
-                for vertex in self.collision.mesh.vertices:
+                self.store_float(self.collision.center[0], width=32, start=-2000000.0, end=2000000.0)
+                self.store_float(self.collision.center[1], width=32, start=-2000000.0, end=2000000.0)
+                self.store_float(self.collision.center[2], width=32, start=-2000000.0, end=2000000.0)
+                for vertex in self.collision.vertices:
                     self.store_float(vertex[0], width=32, start=-2000000.0, end=2000000.0)
                     self.store_float(vertex[1], width=32, start=-2000000.0, end=2000000.0)
                     self.store_float(vertex[2], width=32, start=-2000000.0, end=2000000.0)
-                for polygon in self.collision.mesh.polygons:
+                for polygon in self.collision.polygons:
                     self.store_uint(len(polygon), width=8)
                     for index in polygon:
                         self.store_uint(index, width=16)
             self.align()
 
-        def store_components(self, count=1):
-            for i in range(count):
-                self.store_uint(0, width=32)
-                self.store_uint(0, width=6)
-            self.align()
+        def store_components(self):
+            for lod in self.lods:
+                lod.meshes = []  # TODO: Store vertices and indices
+                self.store_uint(len(lod.meshes), width=32)
+                self.store_uint(lod.scale, width=6)
+                self.align()
+                for mesh in lod.meshes:
+                    self.store_uint(1, end=8)
+                    self.store_uint(8, end=8)
+                    self.store_uint(mesh.node.index - 1, width=8)
+                    for i in range(1, 8):
+                        self.store_uint(0, width=8)
+                    self.store_uint(mesh.material.index, end=256)
+                    self.store_uint(mesh.format, width=32)
+                    self.store_uint(mesh.format, width=32)
+                    self.store_uint(7, width=32)
+                    self.store_uint(len(mesh.vertices), width=32)
+                    self.store_uint(len(mesh.faces) * 3, width=32)
+                    self.align()
 
-        def store_families(self, count1=1, count2=1):
-            for i1 in range(count1):
-                self.store_float(float(self.distances[i1]), width=32, start=0.0, end=100000.0)
-                for i2 in range(count2):
-                    self.store_uint(0, width=32)
-            self.align()
+        def store_families(self):
+            for lod in self.lods:
+                self.store_float(float(lod.distance), width=32, start=0.0, end=100000.0)
+                self.store_uint(lod.index, width=32)
+                self.align()
 
-    class Node:
+    class ThereNode:
         def __init__(self, name):
             self.name = name
             self.index = None
-            self.mesh = None
+            self.meshes = []
             self.children = []
             self.vertex_count = 0
+            self.face_count = 0
             self.parent_index = None
 
-    class Material:
+    class ThereMaterial:
         def __init__(self, name):
             self.name = name
+            self.index = None
             self.is_lit = True
             self.is_two_sided = False
             self.textures = {}
 
-    class Mesh:
+    class ThereCollision:
         pass
+
+    class ThereLOD:
+        def __init__(self, index, distance):
+            self.index = index
+            self.distance = distance
+            self.meshes = []
+            self.scale = 0  # TODO: Calculate this
+
+    class ThereMesh:
+        class Vertex:
+            def __init__(self, position, normal, colors, uvs):
+                self.position = position
+                self.normal = normal
+                self.colors = colors
+                self.uvs = uvs
+
+        def __init__(self):
+            self.format = 0
 
     def check(self, context):
         old_filepath = self.filepath
@@ -343,7 +377,7 @@ class ExportModelBase:
         context.window_manager.progress_begin(0, 100)
         try:
             context.window_manager.progress_update(0)
-            self.model = ExportModelBase.Model()
+            self.model = ExportModelBase.ThereModel()
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
@@ -353,8 +387,10 @@ class ExportModelBase:
             self.model.nodes.append(self.gather_nodes(bpy_node))
             assert self.model.nodes[0] is not None, 'The root note was not found.'
             context.window_manager.progress_update(25)
-            self.flatten_nodes(self.sort_nodes(self.model.nodes[0].children), parent_index=0)
+            self.sort_nodes()
+            self.flatten_nodes()
             self.gather_materials()
+            self.flatten_meshes()
             context.window_manager.progress_update(50)
             self.model.save(self.filepath)
             context.window_manager.progress_update(100)
@@ -366,17 +402,18 @@ class ExportModelBase:
 
     def gather_properties(self, bpy_node):
         props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) in [str, int, float]])
-        self.model.distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
-        if self.model.distances[0] < 1:
-            self.model.distances[0] = 1
+        distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
+        if distances[0] < 1:
+            distances[0] = 1
         for i in range(1, 4):
-            if self.model.distances[i - 1] >= self.model.distances[i]:
-                self.model.distances[i] = round(self.model.distances[i - 1] * 1.5)
+            if distances[i - 1] >= distances[i]:
+                distances[i] = round(distances[i - 1] * 1.5)
+        self.model.lods = [ExportModelBase.ThereLOD(index=i, distance=d) for i, d in enumerate(distances)]
 
     def gather_nodes(self, bpy_node, level=0):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
-        node = ExportModelBase.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
+        node = ExportModelBase.ThereNode(name=re.sub(r'\.\d+$', '', bpy_node.name))
         is_collision = (level == 1 and node.name.lower() == 'col')
         bpy_active = bpy.context.view_layer.objects.active
         bpy.context.view_layer.objects.active = bpy_node
@@ -385,50 +422,71 @@ class ExportModelBase:
         else:
             bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
         bpy.context.view_layer.objects.active = bpy_active
-        if not self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]):
-            raise RuntimeError('Apply scale to all objects in scene before exporting.')
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
         if bpy_node.rotation_mode == 'QUATERNION':
             node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
         else:
             node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
-        if level == 0 and not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
-            raise RuntimeError('Apply rotation to root node in scene before exporting.')
+        assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
+        if level == 0:
+            assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to root node in scene before exporting.'
+        elif is_collision:
+            assert self.is_close(node.position, [0.0, 0.0, 0.0]), 'Apply location to collision in scene before exporting.'
+            assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to collision in scene before exporting.'
         if bpy_node.type == 'MESH':
-            node.mesh = ExportModelBase.Mesh()
-            node.mesh.vertices = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
             if is_collision:
-                if not self.is_close(node.position, [0.0, 0.0, 0.0]):
-                    raise RuntimeError('Apply location to collision in scene before exporting.')
-                if not self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]):
-                    raise RuntimeError('Apply rotation to collision in scene before exporting.')
-                node.mesh.polygons = self.optimize_collision(bpy_node.data.polygons)
-                self.model.collision = node
-            else:
-                node.mesh.polygons = [list(p.vertices) for p in bpy_node.data.polygons]
-                node.mesh.normals = [list(v.normal) for v in bpy_node.data.vertices]
-                #node.mesh.uv_layers = bpy_node.data.uv_layers
-                #node.mesh.vertex_colors = bpy_node.data.vertex_colors
-                for name in bpy_node.material_slots.keys():
-                    self.model.materials[name] = ExportModelBase.Material(name=name)
+                collision = ExportModelBase.ThereCollision()
+                collision.vertices = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
+                collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
+                collision.center = [
+                    (min([v[0] for v in collision.vertices]) + max([v[0] for v in collision.vertices])) / 2.0,
+                    (min([v[1] for v in collision.vertices]) + max([v[1] for v in collision.vertices])) / 2.0,
+                    (min([v[2] for v in collision.vertices]) + max([v[2] for v in collision.vertices])) / 2.0,
+                ]
+                self.model.collision = collision
+                return None
+            positions = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
+            normals = [list(v.normal) for v in bpy_node.data.vertices]
+            indices = [i.vertex_index for i in bpy_node.data.loops]
+            colors = [[list(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
+            uvs = [[list(d.uv) for d in e.data] for e in bpy_node.data.uv_layers][:2]
+            for index, name in enumerate(bpy_node.material_slots.keys()):
+                if name not in self.model.materials:
+                    self.model.materials[name] = ExportModelBase.ThereMaterial(name=name)
+                mesh = ExportModelBase.ThereMesh()
+                mesh.material = self.model.materials[name]
+                bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
+                if len(bpy_polygons) == 0:
+                    continue
+                mesh.vertices, mesh.faces = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, normals=normals, indices=indices, colors=colors, uvs=uvs, name=name)
+                if len(mesh.vertices) == 0 or len(mesh.faces) == 0 or len(mesh.vertices[0].uvs) == 0:
+                    continue
+                mesh.format |= 1 << 0
+                mesh.format |= 1 << 3
+                if len(mesh.vertices[0].colors) >= 1:
+                    mesh.format |= 1 << 4
+                if len(mesh.vertices[0].uvs) >= 1:
+                    mesh.format |= 1 << 5
+                if len(mesh.vertices[0].uvs) >= 2:
+                    mesh.format |= 1 << 6
+                node.meshes.append(mesh)
         if is_collision:
             return None
         for bpy_child in bpy_node.children:
             child = self.gather_nodes(bpy_child, level=level + 1)
             if child is not None:
                 node.children.append(child)
-                if child.mesh is not None:
-                    node.vertex_count += len(child.mesh.vertices)
+                for mesh in child.meshes:
+                    node.vertex_count += len(mesh.vertices)
+                    node.face_count += len(mesh.faces)
         return node
 
-    def sort_nodes(self, nodes):
-        sorted_nodes = [n for n in nodes if n.name.lower() != 'col']
-        sorted_nodes.sort(key=operator.attrgetter('vertex_count'), reverse=True)
-        for i, node in enumerate(sorted_nodes):
-            node.lod_index = i
-        return sorted_nodes[0]
+    def sort_nodes(self):
+        self.model.nodes[0].children.sort(key=operator.attrgetter('vertex_count'), reverse=True)
 
-    def flatten_nodes(self, node, parent_index):
+    def flatten_nodes(self, node=None, parent_index=0):
+        if node is None:
+            node = self.model.nodes[0].children[0]
         node.index = len(self.model.nodes)
         node.parent_index = parent_index
         self.model.nodes.append(node)
@@ -437,8 +495,9 @@ class ExportModelBase:
 
     def gather_materials(self):
         self.model.materials = list(self.model.materials.values())
-        for material in self.model.materials:
+        for index, material in enumerate(self.model.materials):
             bpy_material = bpy.data.materials[material.name]
+            material.index = index
             material.is_two_sided = not bpy_material.use_backface_culling
             material.is_lit = True
             color_texture = self.gather_texture(bpy_material, 'Base Color')
@@ -525,6 +584,52 @@ class ExportModelBase:
                             vertices1.append(vertices1.pop(0))
                 polygon_groups.append(vertices1)
         return polygon_groups
+
+    def optimize_mesh(self, bpy_polygons, positions, normals, indices, colors, uvs, name):
+        assert True not in [len(p.loop_indices) > 4 for p in bpy_polygons], 'The mesh for %s must be triangulated.' % name
+        vertices = []
+        faces = []
+        map = {}
+        for bpy_polygon in bpy_polygons:
+            triangles = [[bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[2]]]
+            if len(bpy_polygon.loop_indices) == 4:
+                triangles.append([bpy_polygon.loop_indices[2], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[3]])
+            for triangle in triangles:
+                face = []
+                for triangle_index in triangle:
+                    id = '%s:%s' % (triangle_index, indices[triangle_index])
+                    face_index = map.get(id)
+                    if face_index is None:
+                        face_index = len(vertices)
+                        map[id] = face_index
+                        vertices.append(ExportModelBase.ThereMesh.Vertex(
+                            position=positions[indices[triangle_index]],
+                            normal=normals[indices[triangle_index]],
+                            colors=[c[triangle_index] for c in colors],
+                            uvs=[u[triangle_index] for u in uvs],
+                        ))
+                    face.append(face_index)
+                faces.append(face)
+        return (vertices, faces)
+
+    def flatten_meshes(self, lod=None, node=None, node_index=None):
+        if lod is None or node is None or node_index is None:
+            for lod in self.model.lods:
+                if lod.index >= len(self.model.nodes[0].children):
+                    self.model.lods = self.model.lods[:lod.index]
+                    break
+                self.flatten_meshes(lod=lod, node=self.model.nodes[0].children[lod.index], node_index=1)
+            return
+        assert node_index < len(self.model.nodes), 'LOD%s has too many nodes.' % lod.index
+        assert node_index == 1 or node.name == self.model.nodes[node_index].name, 'LOD%s has a different name than LOD0 and may not animate correctly.' % lod.index
+        for mesh in node.meshes:
+            mesh.node = self.model.nodes[node_index]
+            lod.meshes.append(mesh)
+        del node.meshes
+        node_index += 1
+        for child in node.children:
+            node_index = self.flatten_meshes(lod=lod, node=child, node_index=node_index)
+        return node_index
 
     def is_close(self, a, b):
         return False not in [math.isclose(a[i], b[i], abs_tol=0.00001) for i in range(len(a))]
