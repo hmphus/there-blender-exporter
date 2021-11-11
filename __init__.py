@@ -4,6 +4,7 @@ import math
 import copy
 import socket
 import operator
+import itertools
 import bpy
 from bpy_extras.io_utils import ExportHelper
 
@@ -81,7 +82,7 @@ class ExportModelBase:
             return origin_marker
 
         def store(self, value, width):
-            mask = pow(2, width - 1)
+            mask = 1 << (width - 1)
             while mask > 0:
                 if self.marker.mask == 0:
                     self.marker.position += 1
@@ -90,8 +91,11 @@ class ExportModelBase:
                         self.data += b'\0'
                 if value & mask != 0:
                     self.data[self.marker.position] |= self.marker.mask
+                    value ^= mask
                 self.marker.mask >>= 1
                 mask >>= 1
+            if value != 0:
+                raise OverflowError('An overflow has occured while storing the data.')
 
         def store_text(self, value, width, length=None, end=None):
             if length is None:
@@ -289,22 +293,48 @@ class ExportModelBase:
 
         def store_components(self):
             for lod in self.lods:
-                lod.meshes = []  # TODO: Store vertices and indices
                 self.store_uint(len(lod.meshes), width=32)
                 self.store_uint(lod.scale, width=6)
                 self.align()
                 for mesh in lod.meshes:
+                    vertex_format = 0
+                    vertex_functions = []
+                    vertex_format |= 1 << 0
+                    vertex_functions.append(lambda vertex: [self.store_float(v, width=14, start=-1.024, end=1.023) for v in vertex.position])
+                    vertex_format |= 1 << 3
+                    vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.normal])
+                    if len(mesh.vertices[0].colors) >= 1:
+                        vertex_format |= 1 << 4
+                        vertex_functions.append(lambda vertex: self.store_uint(vertex.colors[0], width=32))
+                    if len(mesh.vertices[0].uvs) >= 1:
+                        vertex_format |= 1 << 5
+                        vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[0]])
+                    if len(mesh.vertices[0].uvs) >= 2:
+                        vertex_format |= 1 << 6
+                        vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[1]])
+                    indices = list(itertools.chain.from_iterable(mesh.faces))
+                    index_width = max(4, int(math.ceil(math.log(len(indices), 2))))
+                    assert index_width < 16, 'The mesh is too complicated to export.'
                     self.store_uint(1, end=8)
                     self.store_uint(8, end=8)
                     self.store_uint(mesh.node.index - 1, width=8)
                     for i in range(1, 8):
                         self.store_uint(0, width=8)
                     self.store_uint(mesh.material.index, end=256)
-                    self.store_uint(mesh.format, width=32)
-                    self.store_uint(mesh.format, width=32)
+                    self.store_uint(vertex_format, width=32)
+                    self.store_uint(vertex_format, width=32)
                     self.store_uint(7, width=32)
                     self.store_uint(len(mesh.vertices), width=32)
-                    self.store_uint(len(mesh.faces) * 3, width=32)
+                    self.store_uint(len(indices), width=32)
+                    self.align()
+                    for vertex in mesh.vertices:
+                        for vertex_function in vertex_functions:
+                            vertex_function(vertex)
+                        self.align()
+                    self.store_uint(len(indices), width=index_width)
+                    self.align()
+                    for index in indices:
+                        self.store_uint(index, width=index_width)
                     self.align()
 
         def store_families(self):
@@ -339,7 +369,7 @@ class ExportModelBase:
             self.index = index
             self.distance = distance
             self.meshes = []
-            self.scale = 0  # TODO: Calculate this
+            self.scale = None
 
     class ThereMesh:
         class Vertex:
@@ -348,9 +378,6 @@ class ExportModelBase:
                 self.normal = normal
                 self.colors = colors
                 self.uvs = uvs
-
-        def __init__(self):
-            self.format = 0
 
     def check(self, context):
         old_filepath = self.filepath
@@ -391,6 +418,7 @@ class ExportModelBase:
             self.flatten_nodes()
             self.gather_materials()
             self.flatten_meshes()
+            self.scale_meshes()
             context.window_manager.progress_update(50)
             self.model.save(self.filepath)
             context.window_manager.progress_update(100)
@@ -415,13 +443,14 @@ class ExportModelBase:
             return None
         node = ExportModelBase.ThereNode(name=re.sub(r'\.\d+$', '', bpy_node.name))
         is_collision = (level == 1 and node.name.lower() == 'col')
-        bpy_active = bpy.context.view_layer.objects.active
-        bpy.context.view_layer.objects.active = bpy_node
-        if is_collision:
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True, properties=False)
-        else:
-            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
-        bpy.context.view_layer.objects.active = bpy_active
+        # FIXME: This doesn't work
+        # bpy_active = bpy.context.view_layer.objects.active
+        # bpy.context.view_layer.objects.active = bpy_node
+        # if is_collision:
+        #     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True, properties=False)
+        # else:
+        #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
+        # bpy.context.view_layer.objects.active = bpy_active
         node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
         if bpy_node.rotation_mode == 'QUATERNION':
             node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
@@ -448,8 +477,8 @@ class ExportModelBase:
             positions = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
             normals = [list(v.normal) for v in bpy_node.data.vertices]
             indices = [i.vertex_index for i in bpy_node.data.loops]
-            colors = [[list(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
-            uvs = [[list(d.uv) for d in e.data] for e in bpy_node.data.uv_layers][:2]
+            colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
+            uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
             for index, name in enumerate(bpy_node.material_slots.keys()):
                 if name not in self.model.materials:
                     self.model.materials[name] = ExportModelBase.ThereMaterial(name=name)
@@ -461,14 +490,6 @@ class ExportModelBase:
                 mesh.vertices, mesh.faces = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, normals=normals, indices=indices, colors=colors, uvs=uvs, name=name)
                 if len(mesh.vertices) == 0 or len(mesh.faces) == 0 or len(mesh.vertices[0].uvs) == 0:
                     continue
-                mesh.format |= 1 << 0
-                mesh.format |= 1 << 3
-                if len(mesh.vertices[0].colors) >= 1:
-                    mesh.format |= 1 << 4
-                if len(mesh.vertices[0].uvs) >= 1:
-                    mesh.format |= 1 << 5
-                if len(mesh.vertices[0].uvs) >= 2:
-                    mesh.format |= 1 << 6
                 node.meshes.append(mesh)
         if is_collision:
             return None
@@ -597,7 +618,7 @@ class ExportModelBase:
             for triangle in triangles:
                 face = []
                 for triangle_index in triangle:
-                    id = '%s:%s' % (triangle_index, indices[triangle_index])
+                    id = indices[triangle_index]
                     face_index = map.get(id)
                     if face_index is None:
                         face_index = len(vertices)
@@ -631,8 +652,27 @@ class ExportModelBase:
             node_index = self.flatten_meshes(lod=lod, node=child, node_index=node_index)
         return node_index
 
-    def is_close(self, a, b):
+    def scale_meshes(self):
+        scales = [(s, pow(2.0, s - 32)) for s in range(33, 64)]
+        for lod in self.model.lods:
+            value = max([max([max([abs(p) for p in v.position]) for v in m.vertices]) for m in lod.meshes])
+            try:
+                scale = [s for s in scales if value <= s[1]][0]
+            except IndexError:
+                raise RuntimeError('The model is too big to export.')
+            lod.scale = scale[0]
+            for mesh in lod.meshes:
+                for vertex in mesh.vertices:
+                    for i in range(3):
+                        vertex.position[i] /= scale[1]
+
+    @staticmethod
+    def is_close(a, b):
         return False not in [math.isclose(a[i], b[i], abs_tol=0.00001) for i in range(len(a))]
+
+    @staticmethod
+    def color_as_uint(color):
+        return (int(color[3] * 255.0) << 24) | (int(color[2] * 255.0) << 16) | (int(color[1] * 255.0) << 8) | int(color[0] * 255.0)
 
 
 class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
