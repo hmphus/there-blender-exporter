@@ -4,7 +4,6 @@ import math
 import copy
 import socket
 import operator
-import itertools
 import bpy
 from bpy_extras.io_utils import ExportHelper
 
@@ -312,8 +311,7 @@ class ExportModelBase:
                     if len(mesh.vertices[0].uvs) >= 2:
                         vertex_format |= 1 << 6
                         vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[1]])
-                    indices = list(itertools.chain.from_iterable(mesh.faces))
-                    index_width = max(4, int(math.ceil(math.log(len(indices), 2))))
+                    index_width = max(4, int(math.ceil(math.log(len(mesh.indices), 2))))
                     assert index_width < 16, 'The mesh is too complicated to export.'
                     self.store_uint(1, end=8)
                     self.store_uint(8, end=8)
@@ -325,15 +323,15 @@ class ExportModelBase:
                     self.store_uint(vertex_format, width=32)
                     self.store_uint(7, width=32)
                     self.store_uint(len(mesh.vertices), width=32)
-                    self.store_uint(len(indices), width=32)
+                    self.store_uint(len(mesh.indices), width=32)
                     self.align()
                     for vertex in mesh.vertices:
                         for vertex_function in vertex_functions:
                             vertex_function(vertex)
                         self.align()
-                    self.store_uint(len(indices), width=index_width)
+                    self.store_uint(len(mesh.indices), width=index_width)
                     self.align()
-                    for index in indices:
+                    for index in mesh.indices:
                         self.store_uint(index, width=index_width)
                     self.align()
 
@@ -451,11 +449,10 @@ class ExportModelBase:
         # else:
         #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
         # bpy.context.view_layer.objects.active = bpy_active
-        node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
-        if bpy_node.rotation_mode == 'QUATERNION':
-            node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
-        else:
-            node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
+        bpy_translation = bpy_node.matrix_basis.to_translation()
+        bpy_rotation = bpy_node.matrix_basis.to_quaternion()
+        node.position = [-bpy_translation[0], bpy_translation[2], bpy_translation[1]]
+        node.orientation = list(bpy_rotation.inverted().normalized())
         assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
         if level == 0:
             assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to root node in scene before exporting.'
@@ -487,8 +484,8 @@ class ExportModelBase:
                 bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
                 if len(bpy_polygons) == 0:
                     continue
-                mesh.vertices, mesh.faces = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, normals=normals, indices=indices, colors=colors, uvs=uvs, name=name)
-                if len(mesh.vertices) == 0 or len(mesh.faces) == 0 or len(mesh.vertices[0].uvs) == 0:
+                mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, normals=normals, indices=indices, colors=colors, uvs=uvs, name=name)
+                if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
                     continue
                 node.meshes.append(mesh)
         if is_collision:
@@ -499,7 +496,7 @@ class ExportModelBase:
                 node.children.append(child)
                 for mesh in child.meshes:
                     node.vertex_count += len(mesh.vertices)
-                    node.face_count += len(mesh.faces)
+                    node.face_count += len(mesh.indices) // 3
         return node
 
     def sort_nodes(self):
@@ -608,30 +605,32 @@ class ExportModelBase:
 
     def optimize_mesh(self, bpy_polygons, positions, normals, indices, colors, uvs, name):
         assert True not in [len(p.loop_indices) > 4 for p in bpy_polygons], 'The mesh for %s must be triangulated.' % name
-        vertices = []
-        faces = []
-        map = {}
+        optimized_vertices = []
+        optimized_indices = []
+        optimized_map = {}
         for bpy_polygon in bpy_polygons:
             triangles = [[bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[2]]]
             if len(bpy_polygon.loop_indices) == 4:
                 triangles.append([bpy_polygon.loop_indices[2], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[3]])
             for triangle in triangles:
-                face = []
-                for triangle_index in triangle:
-                    id = indices[triangle_index]
-                    face_index = map.get(id)
-                    if face_index is None:
-                        face_index = len(vertices)
-                        map[id] = face_index
-                        vertices.append(ExportModelBase.ThereMesh.Vertex(
-                            position=positions[indices[triangle_index]],
-                            normal=normals[indices[triangle_index]],
-                            colors=[c[triangle_index] for c in colors],
-                            uvs=[u[triangle_index] for u in uvs],
+                for index in triangle:
+                    key = '%s:%s:%s' % (
+                        indices[index],
+                        ':'.join(['%x' % c[index] for c in colors]),
+                        ':'.join(['%.03f:%.03f' % (u[index][0], u[index][1]) for u in uvs]),
+                    )
+                    optimized_index = optimized_map.get(key)
+                    if optimized_index is None:
+                        optimized_index = len(optimized_vertices)
+                        optimized_map[key] = optimized_index
+                        optimized_vertices.append(ExportModelBase.ThereMesh.Vertex(
+                            position=positions[indices[index]],
+                            normal=normals[indices[index]],
+                            colors=[c[index] for c in colors],
+                            uvs=[u[index] for u in uvs],
                         ))
-                    face.append(face_index)
-                faces.append(face)
-        return (vertices, faces)
+                    optimized_indices.append(optimized_index)
+        return (optimized_vertices, optimized_indices)
 
     def flatten_meshes(self, lod=None, node=None, node_index=None):
         if lod is None or node is None or node_index is None:
@@ -663,8 +662,7 @@ class ExportModelBase:
             lod.scale = scale[0]
             for mesh in lod.meshes:
                 for vertex in mesh.vertices:
-                    for i in range(3):
-                        vertex.position[i] /= scale[1]
+                    vertex.position = [n / scale[1] for n in vertex.position]
 
     @staticmethod
     def is_close(a, b):
