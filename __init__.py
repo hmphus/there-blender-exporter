@@ -441,28 +441,19 @@ class ExportModelBase:
             return None
         node = ExportModelBase.ThereNode(name=re.sub(r'\.\d+$', '', bpy_node.name))
         is_collision = (level == 1 and node.name.lower() == 'col')
-        # FIXME: This doesn't work
-        # bpy_active = bpy.context.view_layer.objects.active
-        # bpy.context.view_layer.objects.active = bpy_node
-        # if is_collision:
-        #     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True, properties=False)
-        # else:
-        #     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True, properties=False)
-        # bpy.context.view_layer.objects.active = bpy_active
-        bpy_translation = bpy_node.matrix_basis.to_translation()
-        bpy_rotation = bpy_node.matrix_basis.to_quaternion()
-        node.position = [-bpy_translation[0], bpy_translation[2], bpy_translation[1]]
-        node.orientation = list(bpy_rotation.inverted().normalized())
+        node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
+        if bpy_node.rotation_mode == 'QUATERNION':
+            node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
+        else:
+            node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
         assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
         if level == 0:
             assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to root node in scene before exporting.'
-        elif is_collision:
-            assert self.is_close(node.position, [0.0, 0.0, 0.0]), 'Apply location to collision in scene before exporting.'
-            assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to collision in scene before exporting.'
         if bpy_node.type == 'MESH':
             if is_collision:
+                positions = [bpy_node.matrix_world @ v.co for v in bpy_node.data.vertices]
                 collision = ExportModelBase.ThereCollision()
-                collision.vertices = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
+                collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
                 collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
                 collision.center = [
                     (min([v[0] for v in collision.vertices]) + max([v[0] for v in collision.vertices])) / 2.0,
@@ -471,7 +462,8 @@ class ExportModelBase:
                 ]
                 self.model.collision = collision
                 return None
-            positions = [[-v.co[0], v.co[2], v.co[1]] for v in bpy_node.data.vertices]
+            positions = [bpy_node.matrix_world @ v.co for v in bpy_node.data.vertices]
+            positions = [[-v[0], v[2], v[1]] for v in positions]
             normals = [list(v.normal) for v in bpy_node.data.vertices]
             indices = [i.vertex_index for i in bpy_node.data.loops]
             colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
