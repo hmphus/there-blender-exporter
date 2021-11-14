@@ -11,12 +11,14 @@ from bpy_extras.io_utils import ExportHelper
 bl_info = {
     'name': 'There Model format',
     'author': 'Brian Gontowski',
-    'version': (0, 9, 0),
-    'blender': (2, 91, 0),
+    'version': (1, 0, 0),
+    'blender': (2, 93, 0),
     'location': 'File > Import-Export',
     'description': 'Import-Export as There Model',
-    'support': 'TESTING',
+    'support': 'COMMUNITY',
     'category': 'Import-Export',
+    'doc_url': 'https://github.com/hmphus/there-blender-exporter/wiki',
+    'tracker_url': 'https://github.com/hmphus/there-blender-exporter/issues',
 }
 
 
