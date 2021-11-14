@@ -638,7 +638,9 @@ class ExportModelBase:
                 self.flatten_meshes(lod=lod, node=self.model.nodes[0].children[lod.index], node_index=1)
             return
         assert node_index < len(self.model.nodes), 'LOD%s has too many nodes.' % lod.index
-        assert node_index == 1 or node.name == self.model.nodes[node_index].name, 'LOD%s has a different name than LOD0 and may not animate correctly.' % lod.index
+        if node_index > 1:
+            if node.name != self.model.nodes[node_index].name:
+                self.report({'WARNING'}, 'LOD%s has a different name than LOD0 and may not animate correctly.' % lod.index)
         for mesh in node.meshes:
             mesh.node = self.model.nodes[node_index]
             lod.meshes.append(mesh)
