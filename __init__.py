@@ -413,11 +413,15 @@ class ExportModelBase:
             assert self.model.nodes[0] is not None, 'The root note was not found.'
             context.window_manager.progress_update(25)
             self.sort_nodes()
+            context.window_manager.progress_update(35)
             self.flatten_nodes()
+            context.window_manager.progress_update(45)
             self.gather_materials()
-            self.flatten_meshes()
-            self.scale_meshes()
             context.window_manager.progress_update(50)
+            self.flatten_meshes()
+            context.window_manager.progress_update(60)
+            self.scale_meshes()
+            context.window_manager.progress_update(75)
             self.model.save(self.filepath)
             context.window_manager.progress_update(100)
         except (RuntimeError, AssertionError) as error:
@@ -448,6 +452,7 @@ class ExportModelBase:
             node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
         assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
         if level == 0:
+            assert self.is_close(node.position, [0.0, 0.0, 0.0]), 'Apply position to root node in scene before exporting.'
             assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to root node in scene before exporting.'
         if bpy_node.type == 'MESH':
             if is_collision:
