@@ -469,10 +469,11 @@ class ExportModelBase:
                 ]
                 self.model.collision = collision
                 return None
+            bpy_node.data.calc_normals_split()
             positions = [bpy_node.matrix_world @ v.co for v in bpy_node.data.vertices]
             positions = [[-v[0], v[2], v[1]] for v in positions]
-            normals = [list(v.normal) for v in bpy_node.data.vertices]
-            indices = [i.vertex_index for i in bpy_node.data.loops]
+            indices = [v.vertex_index for v in bpy_node.data.loops]
+            normals = [[-v.normal[0], v.normal[2], v.normal[1]] for v in bpy_node.data.loops]
             colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
             uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
             for index, name in enumerate(bpy_node.material_slots.keys()):
@@ -483,7 +484,7 @@ class ExportModelBase:
                 bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
                 if len(bpy_polygons) == 0:
                     continue
-                mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, normals=normals, indices=indices, colors=colors, uvs=uvs, name=name)
+                mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, indices=indices, normals=normals, colors=colors, uvs=uvs, name=name)
                 if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
                     continue
                 node.meshes.append(mesh)
@@ -602,7 +603,7 @@ class ExportModelBase:
                 polygon_groups.append(vertices1)
         return polygon_groups
 
-    def optimize_mesh(self, bpy_polygons, positions, normals, indices, colors, uvs, name):
+    def optimize_mesh(self, bpy_polygons, positions, indices, normals, colors, uvs, name):
         assert True not in [len(p.loop_indices) > 4 for p in bpy_polygons], 'The mesh for %s must be triangulated.' % name
         optimized_vertices = []
         optimized_indices = []
@@ -613,8 +614,9 @@ class ExportModelBase:
                 triangles.append([bpy_polygon.loop_indices[2], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[3]])
             for triangle in triangles:
                 for index in triangle:
-                    key = '%s:%s:%s' % (
+                    key = '%s:%s:%s:%s' % (
                         indices[index],
+                        '%.03f:%.03f:%.03f' % (normals[index][0], normals[index][1], normals[index][2]),
                         ':'.join(['%x' % c[index] for c in colors]),
                         ':'.join(['%.03f:%.03f' % (u[index][0], u[index][1]) for u in uvs]),
                     )
@@ -624,7 +626,7 @@ class ExportModelBase:
                         optimized_map[key] = optimized_index
                         optimized_vertices.append(ExportModelBase.ThereMesh.Vertex(
                             position=positions[indices[index]],
-                            normal=normals[indices[index]],
+                            normal=normals[index],
                             colors=[c[index] for c in colors],
                             uvs=[u[index] for u in uvs],
                         ))
