@@ -11,7 +11,7 @@ from bpy_extras.io_utils import ExportHelper
 bl_info = {
     'name': 'There Model format',
     'author': 'Brian Gontowski',
-    'version': (1, 0, 0),
+    'version': (1, 0, 1),
     'blender': (2, 93, 0),
     'location': 'File > Import-Export',
     'description': 'Export as Model for There.com',
@@ -564,7 +564,6 @@ class ExportModelBase:
         return bpy_link.from_node.image.name
 
     def optimize_collision(self, bpy_polygons):
-        assert True not in [len(p.vertices) > 4 for p in bpy_polygons], 'The collision mesh must be triangulated.'
         normal_groups = []
         normal_grouped = [False] * len(bpy_polygons)
         for i1 in range(len(bpy_polygons)):
@@ -604,14 +603,13 @@ class ExportModelBase:
         return polygon_groups
 
     def optimize_mesh(self, bpy_polygons, positions, indices, normals, colors, uvs, name):
-        assert True not in [len(p.loop_indices) > 4 for p in bpy_polygons], 'The mesh for %s must be triangulated.' % name
         optimized_vertices = []
         optimized_indices = []
         optimized_map = {}
         for bpy_polygon in bpy_polygons:
-            triangles = [[bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[2]]]
-            if len(bpy_polygon.loop_indices) == 4:
-                triangles.append([bpy_polygon.loop_indices[2], bpy_polygon.loop_indices[1], bpy_polygon.loop_indices[3]])
+            triangles = []
+            for i in range(2, len(bpy_polygon.loop_indices)):
+                triangles.append([bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[i - 1], bpy_polygon.loop_indices[i]])
             for triangle in triangles:
                 for index in triangle:
                     key = '%s:%s:%s:%s' % (
