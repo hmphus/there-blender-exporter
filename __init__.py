@@ -442,7 +442,7 @@ class ExportModelBase:
                 distances[i] = round(distances[i - 1] * 1.5)
         self.model.lods = [ExportModelBase.ThereLOD(index=i, distance=d) for i, d in enumerate(distances)]
 
-    def gather_nodes(self, bpy_node, level=0):
+    def gather_nodes(self, bpy_node, level=0, matrix_root_inverted=None):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
         node = ExportModelBase.ThereNode(name=re.sub(r'\.\d+$', '', bpy_node.name))
@@ -453,12 +453,15 @@ class ExportModelBase:
         else:
             node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
         assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
+        assert self.is_close(bpy_node.delta_scale, [1.0, 1.0, 1.0]), 'Apply delta scale to all objects in scene before exporting.'
         if level == 0:
-            assert self.is_close(node.position, [0.0, 0.0, 0.0]), 'Apply position to root node in scene before exporting.'
-            assert self.is_close(node.orientation, [1.0, 0.0, 0.0, 0.0]), 'Apply rotation to root node in scene before exporting.'
+            node.position = [0.0, 0.0, 0.0]
+            node.orientation = [1.0, 0.0, 0.0, 0.0]
+            matrix_root_inverted = bpy_node.matrix_local.inverted()
         if bpy_node.type == 'MESH':
+            matrix_world = matrix_root_inverted @ bpy_node.matrix_world
             if is_collision:
-                positions = [bpy_node.matrix_world @ v.co for v in bpy_node.data.vertices]
+                positions = [matrix_world @ v.co for v in bpy_node.data.vertices]
                 collision = ExportModelBase.ThereCollision()
                 collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
                 collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
@@ -470,7 +473,7 @@ class ExportModelBase:
                 self.model.collision = collision
                 return None
             bpy_node.data.calc_normals_split()
-            positions = [bpy_node.matrix_world @ v.co for v in bpy_node.data.vertices]
+            positions = [matrix_world @ v.co for v in bpy_node.data.vertices]
             positions = [[-v[0], v[2], v[1]] for v in positions]
             indices = [v.vertex_index for v in bpy_node.data.loops]
             normals = [[-v.normal[0], v.normal[2], v.normal[1]] for v in bpy_node.data.loops]
@@ -491,7 +494,7 @@ class ExportModelBase:
         if is_collision:
             return None
         for bpy_child in bpy_node.children:
-            child = self.gather_nodes(bpy_child, level=level + 1)
+            child = self.gather_nodes(bpy_child, level=level + 1, matrix_root_inverted=matrix_root_inverted)
             if child is not None:
                 node.children.append(child)
                 for mesh in child.meshes:
