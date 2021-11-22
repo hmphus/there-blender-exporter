@@ -2,6 +2,7 @@ import os
 import re
 import math
 import copy
+import enum
 import socket
 import operator
 import bpy
@@ -354,11 +355,20 @@ class ExportModelBase:
             self.parent_index = None
 
     class ThereMaterial:
+        class DrawMode(enum.IntEnum):
+            DEFAULT = 0
+            OPAQUE = 1
+            BLENDED = 2
+            FILTER = 3
+            CHROMAKEY = 4
+            ADDITIVE = 5
+
         def __init__(self, name):
             self.name = name
             self.index = None
             self.is_lit = True
             self.is_two_sided = False
+            self.draw_mode = ExportModelBase.ThereMaterial.DrawMode.DEFAULT
             self.textures = {}
 
     class ThereCollision:
@@ -556,12 +566,18 @@ class ExportModelBase:
                 raise RuntimeError('Material "%s" needs a Base Color or Emission image.' % material.name)
         if bpy_material.blend_method == 'CLIP':
             if alpha_texture is not None:
-                material.textures['cutout'] = alpha_texture
+                if alpha_texture == color_texture:
+                    material.draw_mode = ExportModelBase.ThereMaterial.DrawMode.CHROMAKEY
+                else:
+                    material.textures['cutout'] = alpha_texture
             else:
                 raise RuntimeError('Material "%s" is set to Alpha Clip but is missing an Alpha image.' % material.name)
         elif bpy_material.blend_method == 'BLEND':
             if alpha_texture is not None:
-                material.textures['opacity'] = alpha_texture
+                if alpha_texture == color_texture:
+                    material.draw_mode = ExportModelBase.ThereMaterial.DrawMode.BLENDED
+                else:
+                    material.textures['opacity'] = alpha_texture
             else:
                 raise RuntimeError('Material "%s" is set to Alpha Blend but is missing an Alpha image.' % material.name)
 
