@@ -539,9 +539,9 @@ class ExportModelBase:
             node.orientation = [1.0, 0.0, 0.0, 0.0]
             matrix_root_inverted = bpy_node.matrix_local.inverted()
         if bpy_node.type == 'MESH':
-            matrix_world = matrix_root_inverted @ bpy_node.matrix_world
+            matrix_model = matrix_root_inverted @ bpy_node.matrix_world
             if is_collision:
-                positions = [matrix_world @ v.co for v in bpy_node.data.vertices]
+                positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
                 collision = ThereCollision()
                 collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
                 collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
@@ -552,11 +552,13 @@ class ExportModelBase:
                 ]
                 self.model.collision = collision
                 return None
+            matrix_rotation = matrix_model.to_quaternion().to_matrix()
             bpy_node.data.calc_normals_split()
-            positions = [matrix_world @ v.co for v in bpy_node.data.vertices]
+            positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
             positions = [[-v[0], v[2], v[1]] for v in positions]
             indices = [v.vertex_index for v in bpy_node.data.loops]
-            normals = [[-v.normal[0], v.normal[2], v.normal[1]] for v in bpy_node.data.loops]
+            normals = [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]
+            normals = [[-v[0], v[2], v[1]] for v in normals]
             colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
             uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
             for index, name in enumerate(bpy_node.material_slots.keys()):
