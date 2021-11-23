@@ -698,7 +698,10 @@ class ExportModelBase:
         bpy_image = bpy_link_node.image
         if bpy_image is None:
             return None
-        return bpy_image.name
+        path = bpy_image.filepath_from_user()
+        if path is '':
+            return None
+        return path
 
     def optimize_collision(self, bpy_polygons):
         normal_groups = []
