@@ -476,12 +476,13 @@ class ExportModelBase:
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
-        self.check(context)
-        context.scene[self.scene_key] = {
-            'save_preview': self.save_preview,
-        }
-        context.window_manager.progress_begin(0, 100)
         try:
+            self.check(context)
+            assert bpy.context.mode != 'EDIT_MESH', 'Exporting while in Edit Mode is not supported.'
+            context.scene[self.scene_key] = {
+                'save_preview': self.save_preview,
+            }
+            context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
             self.model = ThereModel()
             try:
