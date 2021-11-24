@@ -489,10 +489,10 @@ class ExportModelBase:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
             except IndexError:
-                raise RuntimeError('The root note was not found.')
+                raise RuntimeError('The root object was not found.')
             self.gather_properties(bpy_node)
             self.model.nodes.append(self.gather_nodes(bpy_node))
-            assert self.model.nodes[0] is not None, 'The root note was not found.'
+            assert self.model.nodes[0] is not None, 'The root object was not found.'
             context.window_manager.progress_update(25)
             self.sort_nodes()
             context.window_manager.progress_update(35)
@@ -526,55 +526,54 @@ class ExportModelBase:
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
         node = ThereNode(name=re.sub(r'\.\d+$', '', bpy_node.name))
-        is_collision = (level == 1 and node.name.lower() == 'col')
-        node.position = [-bpy_node.location[0], bpy_node.location[2], bpy_node.location[1]]
-        if bpy_node.rotation_mode == 'QUATERNION':
-            node.orientation = list(bpy_node.rotation_quaternion.inverted().normalized())
-        else:
-            node.orientation = list(bpy_node.rotation_euler.to_quaternion().inverted().normalized())
-        assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to all objects in scene before exporting.'
-        assert self.is_close(bpy_node.delta_scale, [1.0, 1.0, 1.0]), 'Apply delta scale to all objects in scene before exporting.'
         if level == 0:
+            matrix_root_inverted = bpy_node.matrix_local.inverted()
             node.position = [0.0, 0.0, 0.0]
             node.orientation = [1.0, 0.0, 0.0, 0.0]
-            matrix_root_inverted = bpy_node.matrix_local.inverted()
-        if bpy_node.type == 'MESH':
+            assert self.is_close(bpy_node.scale, [1.0, 1.0, 1.0]), 'Apply scale to root objects in scene before exporting.'
+            assert self.is_close(bpy_node.delta_scale, [1.0, 1.0, 1.0]), 'Apply delta scale to root objects in scene before exporting.'
+        else:
+            is_collision = (level == 1 and node.name.lower() == 'col')
             matrix_model = matrix_root_inverted @ bpy_node.matrix_world
-            if is_collision:
-                positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
-                collision = ThereCollision()
-                collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
-                collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
-                collision.center = [
-                    (min([v[0] for v in collision.vertices]) + max([v[0] for v in collision.vertices])) / 2.0,
-                    (min([v[1] for v in collision.vertices]) + max([v[1] for v in collision.vertices])) / 2.0,
-                    (min([v[2] for v in collision.vertices]) + max([v[2] for v in collision.vertices])) / 2.0,
-                ]
-                self.model.collision = collision
-                return None
             matrix_rotation = matrix_model.to_quaternion().to_matrix()
-            bpy_node.data.calc_normals_split()
-            positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
-            positions = [[-v[0], v[2], v[1]] for v in positions]
-            indices = [v.vertex_index for v in bpy_node.data.loops]
-            normals = [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]
-            normals = [[-v[0], v[2], v[1]] for v in normals]
-            colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
-            uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
-            for index, name in enumerate(bpy_node.material_slots.keys()):
-                if name not in self.model.materials:
-                    self.model.materials[name] = ThereMaterial(name=name)
-                mesh = ThereMesh()
-                mesh.material = self.model.materials[name]
-                bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
-                if len(bpy_polygons) == 0:
-                    continue
-                mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, indices=indices, normals=normals, colors=colors, uvs=uvs, name=name)
-                if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
-                    continue
-                node.meshes.append(mesh)
-        if is_collision:
-            return None
+            position = matrix_model.to_translation()
+            node.position = [-position[0], position[2], position[1]]
+            node.orientation = list(matrix_model.to_quaternion().inverted().normalized())
+            if bpy_node.type == 'MESH':
+                if is_collision:
+                    positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
+                    collision = ThereCollision()
+                    collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
+                    collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
+                    collision.center = [
+                        (min([v[0] for v in collision.vertices]) + max([v[0] for v in collision.vertices])) / 2.0,
+                        (min([v[1] for v in collision.vertices]) + max([v[1] for v in collision.vertices])) / 2.0,
+                        (min([v[2] for v in collision.vertices]) + max([v[2] for v in collision.vertices])) / 2.0,
+                    ]
+                    self.model.collision = collision
+                    return None
+                bpy_node.data.calc_normals_split()
+                positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
+                positions = [[-v[0], v[2], v[1]] for v in positions]
+                indices = [v.vertex_index for v in bpy_node.data.loops]
+                normals = [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]
+                normals = [[-v[0], v[2], v[1]] for v in normals]
+                colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
+                uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
+                for index, name in enumerate(bpy_node.material_slots.keys()):
+                    if name not in self.model.materials:
+                        self.model.materials[name] = ThereMaterial(name=name)
+                    mesh = ThereMesh()
+                    mesh.material = self.model.materials[name]
+                    bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
+                    if len(bpy_polygons) == 0:
+                        continue
+                    mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, indices=indices, normals=normals, colors=colors, uvs=uvs, name=name)
+                    if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
+                        continue
+                    node.meshes.append(mesh)
+            if is_collision:
+                return None
         for bpy_child in bpy_node.children:
             child = self.gather_nodes(bpy_child, level=level + 1, matrix_root_inverted=matrix_root_inverted)
             if child is not None:
