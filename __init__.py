@@ -12,7 +12,7 @@ from bpy_extras.io_utils import ExportHelper
 bl_info = {
     'name': 'There Model format',
     'author': 'Brian Gontowski',
-    'version': (1, 0, 2),
+    'version': (1, 0, 3),
     'blender': (2, 93, 0),
     'location': 'File > Import-Export',
     'description': 'Export as Model for There.com',
@@ -630,8 +630,9 @@ class ExportModelBase:
             if emission_texture is not None:
                 material.textures[ThereMaterial.Slot.EMISSION] = emission_texture
         else:
-            if emission_texture is not None:
-                material.textures[ThereMaterial.Slot.COLOR] = emission_texture
+            color_texture = emission_texture
+            if color_texture is not None:
+                material.textures[ThereMaterial.Slot.COLOR] = color_texture
                 material.is_lit = False
             else:
                 raise RuntimeError('Material "%s" needs a Base Color or Emission image.' % material.name)
