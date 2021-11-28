@@ -377,6 +377,8 @@ class ThereNode:
         self.vertex_count = 0
         self.face_count = 0
         self.parent_index = None
+        self.position = None
+        self.orientation = None
 
 
 class ThereMaterial:
@@ -413,7 +415,10 @@ class ThereMaterial:
 
 
 class ThereCollision:
-    pass
+    def __init__(self):
+        self.vertices = None
+        self.polygons = None
+        self.center = None
 
 
 class ThereLOD:
@@ -431,6 +436,12 @@ class ThereMesh:
             self.normal = normal
             self.colors = colors
             self.uvs = uvs
+
+    def __init__(self):
+        self.vertices = None
+        self.indices = None
+        self.material = None
+        self.node = None
 
 
 class ExportModelBase:
