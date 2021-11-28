@@ -607,7 +607,7 @@ class ExportModelBase:
             self.flatten_nodes(child, node.index)
 
     def gather_materials(self):
-        # TODO: Add lighting, gloss, and normal textures
+        # TODO: Add gloss and normal textures
         self.model.materials = list(self.model.materials.values())
         for index, material in enumerate(self.model.materials):
             bpy_material = bpy.data.materials[material.name]
@@ -636,12 +636,18 @@ class ExportModelBase:
         color_texture = self.gather_texture(bpy_principled_node, 'Base Color')
         emission_texture = self.gather_texture(bpy_principled_node, 'Emission')
         alpha_texture = self.gather_texture(bpy_principled_node, 'Alpha')
+        if color_texture is None:
+            color_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Base Color')
         if color_texture is not None:
             material.textures[ThereMaterial.Slot.COLOR] = color_texture
+            if lighting_texture is not None:
+                material.textures[ThereMaterial.Slot.LIGHTING] = lighting_texture
+                material.is_lit = False
             if emission_texture is not None:
                 material.textures[ThereMaterial.Slot.EMISSION] = emission_texture
         else:
             color_texture = emission_texture
+            emission_texture = None
             if color_texture is not None:
                 material.textures[ThereMaterial.Slot.COLOR] = color_texture
                 material.is_lit = False
@@ -666,8 +672,13 @@ class ExportModelBase:
 
     def gather_base_diffuse(self, bpy_material, bpy_diffuse_node, material):
         color_texture = self.gather_texture(bpy_diffuse_node, 'Color')
+        if color_texture is None:
+            color_texture, lighting_texture = self.gather_multiply_textures(bpy_diffuse_node, 'Color')
         if color_texture is not None:
             material.textures[ThereMaterial.Slot.COLOR] = color_texture
+            if lighting_texture is not None:
+                material.textures[ThereMaterial.Slot.LIGHTING] = lighting_texture
+                material.is_lit = False
         else:
             raise RuntimeError('Material "%s" needs a Color image.' % material.name)
 
@@ -713,9 +724,30 @@ class ExportModelBase:
         if bpy_image is None:
             return None
         path = bpy_image.filepath_from_user()
-        if path is '':
+        if path == '':
             return None
         return path
+
+    def gather_multiply_textures(self, bpy_material_node, name):
+        bpy_input = bpy_material_node.inputs.get(name)
+        if bpy_input is None:
+            return None, None
+        if not bpy_input.is_linked:
+            return None, None
+        if bpy_input.is_multi_input:
+            return None, None
+        bpy_link_node = bpy_input.links[0].from_node
+        if bpy_link_node.type != 'MIX_RGB':
+            return None, None
+        if bpy_link_node.blend_type != 'MULTIPLY':
+            return None, None
+        color_texture_1 = self.gather_texture(bpy_link_node, 'Color1')
+        if color_texture_1 is None:
+            return None, None
+        color_texture_2 = self.gather_texture(bpy_link_node, 'Color2')
+        if color_texture_2 is None:
+            return None, None
+        return color_texture_1, color_texture_2
 
     def optimize_collision(self, bpy_polygons):
         normal_groups = []
