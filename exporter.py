@@ -129,13 +129,18 @@ class ExportModelBase:
                     self.model.collision = collision
                     return None
                 bpy_node.data.calc_normals_split()
-                positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
-                positions = [[-v[0], v[2], v[1]] for v in positions]
-                indices = [v.vertex_index for v in bpy_node.data.loops]
-                normals = [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]
-                normals = [[-v[0], v[2], v[1]] for v in normals]
-                colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
-                uvs = [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2]
+                bpy_node.data.calc_tangents()
+                components = {
+                    'positions': [[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
+                    'indices': [v.vertex_index for v in bpy_node.data.loops],
+                    'normals': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
+                    'tangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
+                    'bitangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
+                    'colors': [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
+                    'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
+                }
+                bpy_node.data.free_tangents()
+                bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
                     if name not in self.model.materials:
                         self.model.materials[name] = there.Material(name=name)
@@ -144,7 +149,7 @@ class ExportModelBase:
                     bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
                     if len(bpy_polygons) == 0:
                         continue
-                    mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, positions=positions, indices=indices, normals=normals, colors=colors, uvs=uvs, name=name)
+                    mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, name=name, components=components)
                     if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
                         continue
                     node.meshes.append(mesh)
@@ -172,7 +177,7 @@ class ExportModelBase:
             self.flatten_nodes(child, node.index)
 
     def gather_materials(self):
-        # TODO: Add gloss and normal textures
+        # TODO: Add gloss texture
         self.model.materials = list(self.model.materials.values())
         for index, material in enumerate(self.model.materials):
             bpy_material = bpy.data.materials[material.name]
@@ -201,6 +206,7 @@ class ExportModelBase:
         color_texture = self.gather_texture(bpy_principled_node, 'Base Color')
         emission_texture = self.gather_texture(bpy_principled_node, 'Emission')
         alpha_texture = self.gather_texture(bpy_principled_node, 'Alpha')
+        normal_texture = self.gather_texture(bpy_principled_node, 'Normal')
         if color_texture is None:
             color_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Base Color')
         else:
@@ -236,9 +242,12 @@ class ExportModelBase:
                     material.textures[there.Material.Slot.OPACITY] = alpha_texture
             else:
                 raise RuntimeError('Material "%s" is set to Alpha Blend but is missing an Alpha image.' % material.name)
+        if normal_texture is not None:
+            material.textures[there.Material.Slot.NORMAL] = normal_texture
 
     def gather_base_diffuse(self, bpy_material, bpy_diffuse_node, material):
         color_texture = self.gather_texture(bpy_diffuse_node, 'Color')
+        normal_texture = self.gather_texture(bpy_diffuse_node, 'Normal')
         if color_texture is None:
             color_texture, lighting_texture = self.gather_multiply_textures(bpy_diffuse_node, 'Color')
         else:
@@ -250,6 +259,8 @@ class ExportModelBase:
                 material.is_lit = False
         else:
             raise RuntimeError('Material "%s" needs a Color image.' % material.name)
+        if normal_texture is not None:
+            material.textures[there.Material.Slot.NORMAL] = normal_texture
 
     def gather_detail_principled(self, bpy_material, bpy_principled_node, material):
         detail_texture = self.gather_texture(bpy_principled_node, 'Base Color')
@@ -287,15 +298,17 @@ class ExportModelBase:
         if bpy_input.is_multi_input:
             return None
         bpy_link_node = bpy_input.links[0].from_node
-        if bpy_link_node.type != 'TEX_IMAGE':
-            return None
-        bpy_image = bpy_link_node.image
-        if bpy_image is None:
-            return None
-        path = bpy_image.filepath_from_user()
-        if path == '':
-            return None
-        return path
+        if bpy_link_node.type == 'TEX_IMAGE':
+            bpy_image = bpy_link_node.image
+            if bpy_image is None:
+                return None
+            path = bpy_image.filepath_from_user()
+            if path == '':
+                return None
+            return path
+        if bpy_link_node.type == 'NORMAL_MAP':
+            return self.gather_texture(bpy_link_node, 'Color')
+        return None
 
     def gather_multiply_textures(self, bpy_material_node, name):
         bpy_input = bpy_material_node.inputs.get(name)
@@ -357,7 +370,14 @@ class ExportModelBase:
                 polygon_groups.append(vertices1)
         return polygon_groups
 
-    def optimize_mesh(self, bpy_polygons, positions, indices, normals, colors, uvs, name):
+    def optimize_mesh(self, bpy_polygons, name, components):
+        positions = components['positions']
+        indices = components['indices']
+        normals = components['normals']
+        tangents = components['tangents']
+        bitangents = components['bitangents']
+        colors = components['colors']
+        uvs = components['uvs']
         optimized_vertices = []
         optimized_indices = []
         optimized_map = {}
@@ -380,6 +400,8 @@ class ExportModelBase:
                         optimized_vertices.append(there.Mesh.Vertex(
                             position=positions[indices[index]],
                             normal=normals[index],
+                            tangent=tangents[index],
+                            bitangent=bitangents[index],
                             colors=[c[index] for c in colors],
                             uvs=[u[index] for u in uvs],
                         ))

@@ -68,9 +68,11 @@ class LOD:
 
 class Mesh:
     class Vertex:
-        def __init__(self, position, normal, colors, uvs):
+        def __init__(self, position, normal, tangent, bitangent, colors, uvs):
             self.position = position
             self.normal = normal
+            self.tangent = tangent
+            self.bitangent = bitangent
             self.colors = colors
             self.uvs = uvs
 
@@ -395,6 +397,11 @@ class Model:
                 if len(mesh.vertices[0].uvs) >= 2:
                     vertex_format |= 1 << 6
                     vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[1]])
+                if Material.Slot.NORMAL in mesh.material.textures:
+                    vertex_format |= 1 << 7
+                    vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.tangent])
+                    vertex_format |= 1 << 8
+                    vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.bitangent])
                 index_width = max(4, int(math.ceil(math.log(len(mesh.indices), 2))))
                 assert index_width < 16, 'The mesh is too complicated to export.'
                 self.store_uint(1, end=8)
