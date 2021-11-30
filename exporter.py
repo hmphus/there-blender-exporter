@@ -58,7 +58,7 @@ class ExportModelBase:
             }
             context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
-            self.model = there.Model()
+            self.model = there.Model(path=self.filepath)
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
@@ -78,9 +78,10 @@ class ExportModelBase:
             context.window_manager.progress_update(60)
             self.scale_meshes()
             context.window_manager.progress_update(75)
-            self.model.save_model(self.filepath)
+            self.model.save()
+            context.window_manager.progress_update(85)
             if self.save_preview:
-                self.model.save_preview(self.filepath)
+                there.Preview(path=os.path.splitext(self.filepath)[0] + '.preview', model=self.model).save()
             context.window_manager.progress_update(100)
         except (RuntimeError, AssertionError) as error:
             self.report({'ERROR'}, str(error))

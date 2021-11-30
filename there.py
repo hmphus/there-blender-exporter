@@ -92,67 +92,20 @@ class Model:
         def clone(self):
             return copy.copy(self)
 
-    class Xml:
-        def __init__(self, tag, value=None):
-            self.tag = tag
-            self.value = value
-            self.children = []
-
-        def append(self, xml):
-            self.children.append(xml)
-
-        def to_text(self, level=0):
-            space = (' ' * level)
-            text = '%s<%s>' % (space, self.tag)
-            if self.value is not None:
-                value_type = type(self.value)
-                if value_type == str:
-                    text += self.value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                elif value_type == int or value_type == bool:
-                    text += '%d' % self.value
-                elif value_type == float:
-                    text += '%.03f' % self.value
-            else:
-                text += '\n'
-                for child in self.children:
-                    text += child.to_text(level + 2)
-                text += space
-            text += '</%s>\n' % self.tag
-            return text
-
-    def __init__(self):
+    def __init__(self, path):
+        self.path = path
         self.lods = None
         self.nodes = []
         self.materials = {}
         self.collision = None
 
-    def save_model(self, path):
+    def save(self):
         assert type(self.materials) == list, 'The materials were not flattened.'
         self.data = bytearray()
         self.marker = Model.Marker()
         self.store_header()
-        with open(path, 'wb') as file:
+        with open(self.path, 'wb') as file:
             file.write(self.data)
-
-    def save_preview(self, path):
-        assert type(self.materials) == list, 'The materials were not flattened.'
-        xml = Model.Xml('Preview')
-        xml.append(Model.Xml('Model', os.path.normpath(path)))
-        for material in self.materials:
-            xml_material = Model.Xml('Material')
-            xml_material.append(Model.Xml('Name', material.name))
-            for texture_slot in Material.Slot:
-                texture_path = material.textures.get(texture_slot)
-                if texture_path is not None:
-                    texture_path = os.path.splitdrive(os.path.normpath(os.path.join(os.path.dirname(path), texture_path)))[1]
-                    xml_material.append(Model.Xml(texture_slot.map_name, texture_path))
-            xml_material.append(Model.Xml('lit', material.is_lit))
-            xml_material.append(Model.Xml('twosided', material.is_two_sided))
-            xml_material.append(Model.Xml('lightmap', Material.Slot.LIGHTING in material.textures))
-            xml_material.append(Model.Xml('drawmode', material.draw_mode.value))
-            xml.append(xml_material)
-        with open(os.path.splitext(path)[0] + '.preview', 'w', encoding='utf-8') as file:
-            file.write(xml.to_text())
 
     def align(self):
         self.marker.mask = 0
@@ -431,3 +384,57 @@ class Model:
             self.store_float(float(lod.distance), width=32, start=0.0, end=100000.0)
             self.store_uint(lod.index, width=32)
             self.align()
+
+
+class Preview:
+    class Xml:
+        def __init__(self, tag, value=None):
+            self.tag = tag
+            self.value = value
+            self.children = []
+
+        def append(self, xml):
+            self.children.append(xml)
+
+        def to_text(self, level=0):
+            space = (' ' * level)
+            text = '%s<%s>' % (space, self.tag)
+            if self.value is not None:
+                value_type = type(self.value)
+                if value_type == str:
+                    text += self.value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                elif value_type == int or value_type == bool:
+                    text += '%d' % self.value
+                elif value_type == float:
+                    text += '%.03f' % self.value
+            else:
+                text += '\n'
+                for child in self.children:
+                    text += child.to_text(level + 2)
+                text += space
+            text += '</%s>\n' % self.tag
+            return text
+
+    def __init__(self, path, model):
+        self.path = path
+        self.model = model
+
+    def save(self):
+        assert type(self.model.materials) == list, 'The materials were not flattened.'
+        xml = Preview.Xml('Preview')
+        xml.append(Preview.Xml('Model', os.path.normpath(self.model.path)))
+        for material in self.model.materials:
+            xml_material = Preview.Xml('Material')
+            xml_material.append(Preview.Xml('Name', material.name))
+            for texture_slot in Material.Slot:
+                texture_path = material.textures.get(texture_slot)
+                if texture_path is not None:
+                    texture_path = os.path.splitdrive(os.path.normpath(os.path.join(os.path.dirname(self.model.path), texture_path)))[1]
+                    xml_material.append(Preview.Xml(texture_slot.map_name, texture_path))
+            xml_material.append(Preview.Xml('lit', material.is_lit))
+            xml_material.append(Preview.Xml('twosided', material.is_two_sided))
+            xml_material.append(Preview.Xml('lightmap', Material.Slot.LIGHTING in material.textures))
+            xml_material.append(Preview.Xml('drawmode', material.draw_mode.value))
+            xml.append(xml_material)
+        with open(self.path, 'w', encoding='utf-8') as file:
+            file.write(xml.to_text())
