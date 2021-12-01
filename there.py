@@ -100,7 +100,7 @@ class Model:
         self.collision = None
 
     def save(self):
-        assert type(self.materials) == list, 'The materials were not flattened.'
+        assert isinstance(self.materials, list), 'The materials were not flattened.'
         self.data = bytearray()
         self.marker = Model.Marker()
         self.store_header()
@@ -400,12 +400,11 @@ class Preview:
             space = (' ' * level)
             text = '%s<%s>' % (space, self.tag)
             if self.value is not None:
-                value_type = type(self.value)
-                if value_type == str:
+                if isinstance(self.value, str):
                     text += self.value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                elif value_type == int or value_type == bool:
+                elif isinstance(self.value, int) or isinstance(self.value, bool):
                     text += '%d' % self.value
-                elif value_type == float:
+                elif isinstance(self.value, float):
                     text += '%.03f' % self.value
             else:
                 text += '\n'
@@ -420,7 +419,7 @@ class Preview:
         self.model = model
 
     def save(self):
-        assert type(self.model.materials) == list, 'The materials were not flattened.'
+        assert isinstance(self.model.materials, list), 'The materials were not flattened.'
         xml = Preview.Xml('Preview')
         xml.append(Preview.Xml('Model', os.path.normpath(self.model.path)))
         for material in self.model.materials:
