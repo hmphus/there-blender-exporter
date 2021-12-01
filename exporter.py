@@ -433,7 +433,10 @@ class ExportModelBase:
     def scale_meshes(self):
         scales = [(s, pow(2.0, s - 32)) for s in range(33, 64)]
         for lod in self.model.lods:
-            value = max([max([max([abs(p) for p in v.position]) for v in m.vertices]) for m in lod.meshes])
+            try:
+                value = max([max([max([abs(p) for p in v.position]) for v in m.vertices]) for m in lod.meshes])
+            except ValueError:
+                value = 0
             try:
                 scale = [s for s in scales if value <= s[1]][0]
             except IndexError:
