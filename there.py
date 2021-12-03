@@ -48,6 +48,9 @@ class Material:
         self.is_lit = True
         self.is_two_sided = False
         self.draw_mode = Material.DrawMode.DEFAULT
+        self.specular_power = None
+        self.specular_color = None
+        self.environment_color = None
         self.textures = {}
 
 

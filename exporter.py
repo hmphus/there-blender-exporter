@@ -218,9 +218,9 @@ class ExportModelBase:
         normal_texture = self.gather_texture(bpy_there_node, 'Normal')
         gloss_color_texture = self.gather_texture(bpy_there_node, 'Gloss Color')
         gloss_alpha_texture = self.gather_texture(bpy_there_node, 'Gloss Alpha')
-        # Specular Power
-        # Specular
-        # Environment
+        specular_power = max(0.0, min(self.gather_float(bpy_there_node, 'Specular Power', 40.0), 511.0))
+        specular_color = self.gather_color(bpy_there_node, 'Specular', 0x202020) & 0xFFFFFF
+        environment_color = self.gather_color(bpy_there_node, 'Environment', 0x000000) & 0xFFFFFF
         if lighting_texture is not None:
             if color_texture is not None:
                 emission_texture = color_texture
@@ -269,8 +269,10 @@ class ExportModelBase:
         if gloss_color_texture is not None:
             if gloss_color_texture != gloss_alpha_texture:
                 self.report({'WARNING'}, 'Material "%s" does not have the same Gloss Color and Gloss Alpha images.' % material.name)
-            # TODO: Implement gloss texture and properties
-            # material.textures[there.Material.Slot.GLOSS] = gloss_color_texture
+            material.textures[there.Material.Slot.GLOSS] = gloss_color_texture
+            material.specular_power = specular_power
+            material.specular_color = specular_color
+            material.environment_color = environment_color
 
     def gather_base_principled_bsdf(self, bpy_material, bpy_principled_node, material):
         color_texture = self.gather_texture(bpy_principled_node, 'Base Color')
@@ -394,6 +396,32 @@ class ExportModelBase:
         if color_texture_2 is None:
             return None, None
         return color_texture_1, color_texture_2
+
+    def gather_float(self, bpy_material_node, name, value):
+        bpy_input = bpy_material_node.inputs.get(name)
+        if bpy_input is None:
+            return value
+        if bpy_input.type == 'VALUE':
+            value = float(bpy_input.default_value)
+        if not bpy_input.is_linked:
+            return value
+        bpy_link_node = bpy_input.links[0].from_node
+        if bpy_link_node.type == 'VALUE':
+            value = float(bpy_link_node.outputs[0].default_value)
+        return value
+
+    def gather_color(self, bpy_material_node, name, value):
+        bpy_input = bpy_material_node.inputs.get(name)
+        if bpy_input is None:
+            return value
+        if bpy_input.type == 'RGBA':
+            value = self.color_as_uint(bpy_input.default_value)
+        if not bpy_input.is_linked:
+            return value
+        bpy_link_node = bpy_input.links[0].from_node
+        if bpy_link_node.type == 'RGB':
+            value = self.color_as_uint(bpy_link_node.outputs[0].default_value)
+        return value
 
     def optimize_collision(self, bpy_polygons):
         normal_groups = []
