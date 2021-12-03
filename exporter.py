@@ -208,23 +208,24 @@ class ExportModelBase:
         emission_texture = self.gather_texture(bpy_principled_node, 'Emission')
         alpha_texture = self.gather_texture(bpy_principled_node, 'Alpha')
         normal_texture = self.gather_texture(bpy_principled_node, 'Normal')
-        if color_texture is None:
-            color_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Base Color')
-        else:
-            lighting_texture = None
+        if color_texture is None and emission_texture is None:
+            emission_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Emission')
+            if emission_texture is None:
+                emission_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Base Color')
+                if emission_texture is not None:
+                    self.report({'WARNING'}, 'Material "%s" is using a Base Color for baked lighting.' % material.name)
         if color_texture is not None:
             material.textures[there.Material.Slot.COLOR] = color_texture
-            if lighting_texture is not None:
-                material.textures[there.Material.Slot.LIGHTING] = lighting_texture
-                material.is_lit = False
             if emission_texture is not None:
                 material.textures[there.Material.Slot.EMISSION] = emission_texture
         else:
             color_texture = emission_texture
             emission_texture = None
             if color_texture is not None:
-                material.textures[there.Material.Slot.COLOR] = color_texture
                 material.is_lit = False
+                material.textures[there.Material.Slot.COLOR] = color_texture
+                if lighting_texture is not None:
+                    material.textures[there.Material.Slot.LIGHTING] = lighting_texture
             else:
                 raise RuntimeError('Material "%s" needs a Base Color or Emission image.' % material.name)
         if bpy_material.blend_method == 'CLIP':
@@ -249,15 +250,8 @@ class ExportModelBase:
     def gather_base_diffuse(self, bpy_material, bpy_diffuse_node, material):
         color_texture = self.gather_texture(bpy_diffuse_node, 'Color')
         normal_texture = self.gather_texture(bpy_diffuse_node, 'Normal')
-        if color_texture is None:
-            color_texture, lighting_texture = self.gather_multiply_textures(bpy_diffuse_node, 'Color')
-        else:
-            lighting_texture = None
         if color_texture is not None:
             material.textures[there.Material.Slot.COLOR] = color_texture
-            if lighting_texture is not None:
-                material.textures[there.Material.Slot.LIGHTING] = lighting_texture
-                material.is_lit = False
         else:
             raise RuntimeError('Material "%s" needs a Color image.' % material.name)
         if normal_texture is not None:
