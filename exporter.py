@@ -178,7 +178,6 @@ class ExportModelBase:
             self.flatten_nodes(child, node.index)
 
     def gather_materials(self):
-        # TODO: Add gloss texture
         self.model.materials = list(self.model.materials.values())
         for index, material in enumerate(self.model.materials):
             bpy_material = bpy.data.materials[material.name]
@@ -194,16 +193,86 @@ class ExportModelBase:
             if not bpy_input.is_linked:
                 raise RuntimeError('Material "%s" does not have a linked Surface.' % material.name)
             bpy_link_node = bpy_input.links[0].from_node
-            if bpy_link_node.type == 'BSDF_PRINCIPLED':
-                self.gather_base_principled(bpy_material, bpy_link_node, material)
+            if bpy_link_node.type == 'GROUP':
+                bpy_node_tree = bpy_link_node.node_tree
+                if bpy_node_tree.name == 'There BSDF':
+                    self.gather_there_bsdf(bpy_material, bpy_link_node, material)
+                else:
+                    raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (material.name, bpy_node_tree.name))
+            elif bpy_link_node.type == 'BSDF_PRINCIPLED':
+                self.gather_base_principled_bsdf(bpy_material, bpy_link_node, material)
             elif bpy_link_node.type == 'BSDF_DIFFUSE':
-                self.gather_base_diffuse(bpy_material, bpy_link_node, material)
+                self.gather_base_diffuse_bsdf(bpy_material, bpy_link_node, material)
             elif bpy_link_node.type == 'MIX_SHADER':
                 self.gather_mix(bpy_material, bpy_link_node, material)
             else:
-                raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (material.name, bpy_link_node.type))
+                raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (material.name, bpy_link_node.name))
 
-    def gather_base_principled(self, bpy_material, bpy_principled_node, material):
+    def gather_there_bsdf(self, bpy_material, bpy_there_node, material):
+        color_texture = self.gather_texture(bpy_there_node, 'Color')
+        emission_texture = self.gather_texture(bpy_there_node, 'Emission')
+        alpha_texture = self.gather_texture(bpy_there_node, 'Alpha')
+        detail_color_texture = self.gather_texture(bpy_there_node, 'Detail Color')
+        detail_alpha_texture = self.gather_texture(bpy_there_node, 'Detail Alpha')
+        lighting_texture = self.gather_texture(bpy_there_node, 'Lighting')
+        normal_texture = self.gather_texture(bpy_there_node, 'Normal')
+        gloss_color_texture = self.gather_texture(bpy_there_node, 'Gloss Color')
+        gloss_alpha_texture = self.gather_texture(bpy_there_node, 'Gloss Alpha')
+        # Specular Power
+        # Specular
+        # Environment
+        if lighting_texture is not None:
+            if color_texture is not None:
+                emission_texture = color_texture
+                color_texture = None
+                self.report({'WARNING'}, 'Material "%s" is using a Base Color image for baked lighting.' % material.name)
+            if emission_texture is None:
+                raise RuntimeError('Material "%s" needs an Emission image.' % material.name)
+            if detail_color_texture is not None:
+                raise RuntimeError('Material "%s" has both Detail Color and Lighting images.' % material.name)
+        if color_texture is not None:
+            material.textures[there.Material.Slot.COLOR] = color_texture
+            if emission_texture is not None:
+                material.textures[there.Material.Slot.EMISSION] = emission_texture
+        else:
+            color_texture = emission_texture
+            emission_texture = None
+            if color_texture is not None:
+                material.is_lit = False
+                material.textures[there.Material.Slot.COLOR] = color_texture
+                if lighting_texture is not None:
+                    material.textures[there.Material.Slot.LIGHTING] = lighting_texture
+            else:
+                raise RuntimeError('Material "%s" needs a Base Color or Emission image.' % material.name)
+        if bpy_material.blend_method == 'CLIP':
+            if alpha_texture is not None:
+                if alpha_texture == color_texture:
+                    material.draw_mode = there.Material.DrawMode.CHROMAKEY
+                else:
+                    material.textures[there.Material.Slot.CUTOUT] = alpha_texture
+            else:
+                raise RuntimeError('Material "%s" is set to Alpha Clip but is missing an Alpha image.' % material.name)
+        elif bpy_material.blend_method == 'BLEND':
+            if alpha_texture is not None:
+                if alpha_texture == color_texture:
+                    material.draw_mode = there.Material.DrawMode.BLENDED
+                else:
+                    material.textures[there.Material.Slot.OPACITY] = alpha_texture
+            else:
+                raise RuntimeError('Material "%s" is set to Alpha Blend but is missing an Alpha image.' % material.name)
+        if detail_color_texture is not None:
+            if detail_color_texture != detail_alpha_texture:
+                self.report({'WARNING'}, 'Material "%s" does not have the same Detail Color and Detail Alpha images.' % material.name)
+            material.textures[there.Material.Slot.DETAIL] = detail_color_texture
+        if normal_texture is not None:
+            material.textures[there.Material.Slot.NORMAL] = normal_texture
+        if gloss_color_texture is not None:
+            if gloss_color_texture != gloss_alpha_texture:
+                self.report({'WARNING'}, 'Material "%s" does not have the same Gloss Color and Gloss Alpha images.' % material.name)
+            # TODO: Implement gloss texture and properties
+            # material.textures[there.Material.Slot.GLOSS] = gloss_color_texture
+
+    def gather_base_principled_bsdf(self, bpy_material, bpy_principled_node, material):
         color_texture = self.gather_texture(bpy_principled_node, 'Base Color')
         emission_texture = self.gather_texture(bpy_principled_node, 'Emission')
         alpha_texture = self.gather_texture(bpy_principled_node, 'Alpha')
@@ -213,7 +282,7 @@ class ExportModelBase:
             if emission_texture is None:
                 emission_texture, lighting_texture = self.gather_multiply_textures(bpy_principled_node, 'Base Color')
                 if emission_texture is not None:
-                    self.report({'WARNING'}, 'Material "%s" is using a Base Color for baked lighting.' % material.name)
+                    self.report({'WARNING'}, 'Material "%s" is using a Base Color image for baked lighting.' % material.name)
         if color_texture is not None:
             material.textures[there.Material.Slot.COLOR] = color_texture
             if emission_texture is not None:
@@ -247,7 +316,7 @@ class ExportModelBase:
         if normal_texture is not None:
             material.textures[there.Material.Slot.NORMAL] = normal_texture
 
-    def gather_base_diffuse(self, bpy_material, bpy_diffuse_node, material):
+    def gather_base_diffuse_bsdf(self, bpy_material, bpy_diffuse_node, material):
         color_texture = self.gather_texture(bpy_diffuse_node, 'Color')
         normal_texture = self.gather_texture(bpy_diffuse_node, 'Normal')
         if color_texture is not None:
@@ -257,12 +326,12 @@ class ExportModelBase:
         if normal_texture is not None:
             material.textures[there.Material.Slot.NORMAL] = normal_texture
 
-    def gather_detail_principled(self, bpy_material, bpy_principled_node, material):
+    def gather_detail_principled_bsdf(self, bpy_material, bpy_principled_node, material):
         detail_texture = self.gather_texture(bpy_principled_node, 'Base Color')
         if detail_texture is not None:
             material.textures[there.Material.Slot.DETAIL] = detail_texture
 
-    def gather_detail_diffuse(self, bpy_material, bpy_diffuse_node, material):
+    def gather_detail_diffuse_bsdf(self, bpy_material, bpy_diffuse_node, material):
         detail_texture = self.gather_texture(bpy_diffuse_node, 'Color')
         if detail_texture is not None:
             material.textures[there.Material.Slot.DETAIL] = detail_texture
@@ -273,14 +342,14 @@ class ExportModelBase:
             bpy_link_node = bpy_input.links[0].from_node
             if bpy_link_node.type == 'BSDF_PRINCIPLED':
                 if index == 0:
-                    self.gather_base_principled(bpy_material, bpy_link_node, material)
+                    self.gather_base_principled_bsdf(bpy_material, bpy_link_node, material)
                 elif index == 1:
-                    self.gather_detail_principled(bpy_material, bpy_link_node, material)
+                    self.gather_detail_principled_bsdf(bpy_material, bpy_link_node, material)
             elif bpy_link_node.type == 'BSDF_DIFFUSE':
                 if index == 0:
-                    self.gather_base_diffuse(bpy_material, bpy_link_node, material)
+                    self.gather_base_diffuse_bsdf(bpy_material, bpy_link_node, material)
                 elif index == 1:
-                    self.gather_detail_diffuse(bpy_material, bpy_link_node, material)
+                    self.gather_detail_diffuse_bsdf(bpy_material, bpy_link_node, material)
             else:
                 raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (material.name, bpy_link_node.type))
 
