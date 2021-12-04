@@ -543,7 +543,7 @@ class ExportModelBase:
 
     @staticmethod
     def color_as_uint(color):
-        return (int(color[3] * 255.0) << 24) | (int(color[2] * 255.0) << 16) | (int(color[1] * 255.0) << 8) | int(color[0] * 255.0)
+        return (int(color[3] * 255.0) << 24) | (int(color[0] * 255.0) << 16) | (int(color[1] * 255.0) << 8) | int(color[2] * 255.0)
 
 
 class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
