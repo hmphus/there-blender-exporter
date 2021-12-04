@@ -233,8 +233,14 @@ class Model:
             bool_mask = 1
             self.store_uint(bool_mask, width=16)
             float_mask = 0
+            if material.specular_power is not None:
+                float_mask |= 1 << 5
             self.store_uint(float_mask, width=16)
             color_mask = 0
+            if material.specular_color is not None:
+                color_mask |= 1 << 2
+            if material.environment_color is not None:
+                color_mask |= 1 << 4
             self.store_uint(color_mask, width=16)
             map_mask = 0
             if Material.Slot.COLOR in material.textures:
@@ -260,6 +266,12 @@ class Model:
             if Material.Slot.LIGHTING in material.textures:
                 bool_values |= 1 << 6
             self.store_uint(bool_values, width=16)
+            if material.specular_power is not None:
+                self.store_uint(15488, width=16)  # TODO: Implement this
+            if material.specular_color is not None:
+                self.store_uint(material.specular_color, width=24)
+            if material.environment_color is not None:
+                self.store_uint(material.environment_color, width=24)
             if Material.Slot.COLOR in material.textures:
                 self.store_text('cm/t555cm_devdefault.jpg', width=7, end=48)
             if Material.Slot.OPACITY in material.textures:
@@ -338,26 +350,27 @@ class Model:
             self.store_uint(lod.scale, width=6)
             self.align()
             for mesh in lod.meshes:
+                store_tangents = Material.Slot.NORMAL in mesh.material.textures
                 vertex_format = 0
                 vertex_functions = []
                 vertex_format |= 1 << 0
                 vertex_functions.append(lambda vertex: [self.store_float(v, width=14, start=-1.024, end=1.023) for v in vertex.position])
                 vertex_format |= 1 << 3
                 vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.normal])
-                if len(mesh.vertices[0].colors) >= 1:
+                if len(mesh.vertices[0].colors) >= 1 and not store_tangents:
                     vertex_format |= 1 << 4
                     vertex_functions.append(lambda vertex: self.store_uint(vertex.colors[0], width=32))
                 if len(mesh.vertices[0].uvs) >= 1:
                     vertex_format |= 1 << 5
                     vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[0]])
-                if Material.Slot.NORMAL in mesh.material.textures:
+                if len(mesh.vertices[0].uvs) >= 2 and not store_tangents:
+                    vertex_format |= 1 << 6
+                    vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[1]])
+                if store_tangents:
                     vertex_format |= 1 << 7
                     vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.tangent])
                     vertex_format |= 1 << 8
                     vertex_functions.append(lambda vertex: [self.store_float(v, width=6, start=-1.0, end=1.0) for v in vertex.bitangent])
-                elif len(mesh.vertices[0].uvs) >= 2:
-                    vertex_format |= 1 << 6
-                    vertex_functions.append(lambda vertex: [self.store_float(v, width=18, start=-256.0, end=255.998046875) for v in vertex.uvs[1]])
                 index_width = max(4, int(math.ceil(math.log(len(mesh.indices), 2))))
                 assert index_width < 16, 'The mesh is too complicated to export.'
                 self.store_uint(1, end=8)
@@ -437,6 +450,12 @@ class Preview:
             xml_material.append(Preview.Xml('twosided', material.is_two_sided))
             xml_material.append(Preview.Xml('lightmap', Material.Slot.LIGHTING in material.textures))
             xml_material.append(Preview.Xml('drawmode', material.draw_mode.value))
+            if material.specular_power is not None:
+                xml_material.append(Preview.Xml('specularpower', material.specular_power))
+            if material.specular_color is not None:
+                xml_material.append(Preview.Xml('specular', '#%06x' % material.specular_color))
+            if material.environment_color is not None:
+                xml_material.append(Preview.Xml('environment', '#%06x' % material.environment_color))
             xml.append(xml_material)
         with open(self.path, 'w', encoding='utf-8') as file:
             file.write(xml.to_text())
