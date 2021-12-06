@@ -2,7 +2,7 @@ import os
 import math
 import copy
 import enum
-import socket
+import struct
 
 
 class Node:
@@ -172,6 +172,19 @@ class Model:
             step = (end - start) / (math.pow(2.0, float(width)) - 1.0)
         self.store(round((value - start) / step), width=width)
 
+    def store_half_float(self, value):
+        value = self.float_to_uint32(value)
+        sign = (value & 0x80000000) >> 31
+        exponent = (value & 0x7F800000) >> 23
+        mantissa = (value & 0x7FFFFF) >> 12
+        exponent -= 125
+        if exponent < 0:
+            mantissa = (mantissa | 0x800) >> (1 - exponent)
+            exponent = 0
+        self.store_uint(sign, width=1)
+        self.store_uint(exponent, width=4)
+        self.store_uint(mantissa, width=11)
+
     def store_header(self):
         self.store_text('SOM ', width=8, length=4)
         self.store_int(10, width=32)
@@ -267,7 +280,7 @@ class Model:
                 bool_values |= 1 << 6
             self.store_uint(bool_values, width=16)
             if material.specular_power is not None:
-                self.store_uint(15488, width=16)  # TODO: Implement this
+                self.store_half_float(material.specular_power)
             if material.specular_color is not None:
                 self.store_uint(material.specular_color, width=24)
             if material.environment_color is not None:
@@ -292,10 +305,10 @@ class Model:
             self.store_uint(int_mask, width=16)
             self.align()
             marker4 = self.seek(marker=marker3)
-            self.store_uint(socket.htons(marker4.position - marker3.position), width=16)
+            self.store_uint(self.flip_uint16(marker4.position - marker3.position), width=16)
             self.seek(marker=marker4)
         marker2 = self.seek(marker=marker1)
-        self.store_uint(socket.htons(marker2.position - marker1.position), width=16)
+        self.store_uint(self.flip_uint16(marker2.position - marker1.position), width=16)
         self.seek(marker=marker2)
 
     def store_nodes(self):
@@ -400,6 +413,14 @@ class Model:
             self.store_float(float(lod.distance), width=32, start=0.0, end=100000.0)
             self.store_uint(lod.index, width=32)
             self.align()
+
+    @staticmethod
+    def flip_uint16(value):
+        return struct.unpack('>H', struct.pack('<H', value))[0]
+
+    @staticmethod
+    def float_to_uint32(value):
+        return struct.unpack('>I', struct.pack('>f', value))[0]
 
 
 class Preview:
