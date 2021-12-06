@@ -8,8 +8,6 @@ from . import there
 
 
 class ExportModelBase:
-    scene_key = "ThereExportSettings"
-
     save_preview: bpy.props.BoolProperty(
         name='Previewer Settings',
         description='Also save a .preview file',
@@ -40,22 +38,16 @@ class ExportModelBase:
         return self.filepath != old_filepath
 
     def invoke(self, context, event):
-        settings = context.scene.get(self.scene_key)
-        if settings:
-            try:
-                for key, value in settings.items():
-                    setattr(self, key, value)
-            except (AttributeError, TypeError):
-                del context.scene[self.scene_key]
+        try:
+            del context.scene['ThereExportSettings']
+        except KeyError:
+            pass
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
         try:
             self.check(context)
             assert bpy.context.mode != 'EDIT_MESH', 'Exporting while in Edit Mode is not supported.'
-            context.scene[self.scene_key] = {
-                'save_preview': self.save_preview,
-            }
             context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
             self.model = there.Model(path=self.filepath)
