@@ -121,19 +121,22 @@ class ExportModelBase:
                     ]
                     self.model.collision = collision
                     return None
-                bpy_node.data.calc_normals_split()
-                bpy_node.data.calc_tangents()
-                components = {
-                    'positions': [[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
-                    'indices': [v.vertex_index for v in bpy_node.data.loops],
-                    'normals': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
-                    'tangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
-                    'bitangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
-                    'colors': [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
-                    'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
-                }
-                bpy_node.data.free_tangents()
-                bpy_node.data.free_normals_split()
+                if len(bpy_node.material_slots) == 0:
+                    self.report({'WARNING'}, 'Object "%s" is missing a material and will not be exported.' % bpy_node.name)
+                else:
+                    bpy_node.data.calc_normals_split()
+                    bpy_node.data.calc_tangents()
+                    components = {
+                        'positions': [[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
+                        'indices': [v.vertex_index for v in bpy_node.data.loops],
+                        'normals': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
+                        'tangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
+                        'bitangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
+                        'colors': [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
+                        'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
+                    }
+                    bpy_node.data.free_tangents()
+                    bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
                     if name not in self.model.materials:
                         self.model.materials[name] = there.Material(name=name)
