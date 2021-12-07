@@ -42,6 +42,8 @@ class ExportModelBase:
             del context.scene['ThereExportSettings']
         except KeyError:
             pass
+        preferences = context.preferences.addons[__package__].preferences
+        self.save_preview = preferences.save_preview
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
@@ -552,18 +554,36 @@ class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
     bl_idname = 'export_scene.model'
     bl_label = 'Export There Model'
     filename_ext = '.model'
-    filter_glob: bpy.props.StringProperty(default='*.model', options={'HIDDEN'})
+    filter_glob: bpy.props.StringProperty(
+        default='*.model',
+        options={'HIDDEN'},
+    )
 
 
-def menu_func_export(self, context):
+class ExportPreferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+    save_preview: bpy.props.BoolProperty(
+        name='Export Previewer Settings',
+        description='Save a .preview file when exporting a model',
+        default=False,
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, 'save_preview')
+
+
+def menu_export_handler(self, context):
     self.layout.operator(ExportModel.bl_idname, text='There Model (.model)')
 
 
 def register_exporter():
     bpy.utils.register_class(ExportModel)
-    bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    bpy.utils.register_class(ExportPreferences)
+    bpy.types.TOPBAR_MT_file_export.append(menu_export_handler)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportModel)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    bpy.utils.unregister_class(ExportPreferences)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_export_handler)
