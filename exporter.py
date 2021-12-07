@@ -135,6 +135,12 @@ class ExportModelBase:
                         'colors': [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
                         'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
                     }
+                    if len(components['colors']) == 1:
+                        for color in components['colors'][0]:
+                            if color != 0xFFFFFFFF:
+                                break
+                        else:
+                            del components['colors'][0]
                     bpy_node.data.free_tangents()
                     bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
