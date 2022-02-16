@@ -2,6 +2,7 @@ import os
 import re
 import bpy
 import math
+import bmesh
 import operator
 from bpy_extras.io_utils import ExportHelper
 from . import there
@@ -112,10 +113,11 @@ class ExportModelBase:
             node.orientation = list(matrix_model.to_quaternion().inverted().normalized())
             if bpy_node.type == 'MESH':
                 if is_collision:
-                    positions = [matrix_model @ v.co for v in bpy_node.data.vertices]
+                    positions, polygons = self.optimize_collision(bpy_collision_node=bpy_node)
+                    positions = [matrix_model @ v for v in positions]
                     collision = there.Collision()
                     collision.vertices = [[-v[0], v[2], v[1]] for v in positions]
-                    collision.polygons = self.optimize_collision(bpy_polygons=bpy_node.data.polygons)
+                    collision.polygons = polygons
                     collision.center = [
                         (min([v[0] for v in collision.vertices]) + max([v[0] for v in collision.vertices])) / 2.0,
                         (min([v[1] for v in collision.vertices]) + max([v[1] for v in collision.vertices])) / 2.0,
@@ -426,44 +428,17 @@ class ExportModelBase:
             value = self.color_as_uint(bpy_link_node.outputs[0].default_value)
         return value
 
-    def optimize_collision(self, bpy_polygons):
-        normal_groups = []
-        normal_grouped = [False] * len(bpy_polygons)
-        for i1 in range(len(bpy_polygons)):
-            if normal_grouped[i1]:
-                continue
-            normal_group = [i1]
-            normal_grouped[i1] = True
-            for i2 in range(i1 + 1, len(bpy_polygons)):
-                if math.isclose(bpy_polygons[i1].normal.dot(bpy_polygons[i2].normal), 1.0, abs_tol=0.001):
-                    normal_group.append(i2)
-                    normal_grouped[i2] = True
-            normal_groups.append(normal_group)
-        polygon_groups = []
-        for normal_group in normal_groups:
-            polygon_grouped = [False] * len(normal_group)
-            for i1 in range(len(normal_group)):
-                if polygon_grouped[i1]:
-                    continue
-                vertices1 = list(bpy_polygons[normal_group[i1]].vertices)
-                polygon_grouped[i1] = True
-                for i2 in range(i1 + 1, len(normal_group)):
-                    vertices2 = list(bpy_polygons[normal_group[i2]].vertices)
-                    if len(vertices2) > 3:
-                        continue
-                    vertices3 = [v for v in vertices2 if v not in vertices1]
-                    if len(vertices3) == 1:
-                        vertices2.remove(vertices3[0])
-                        for i3 in range(len(vertices1)):
-                            if vertices1[0] in vertices2 and vertices1[-1] in vertices2:
-                                vertices1 = vertices1 + vertices3
-                                polygon_grouped[i2] = True
-                                break
-                            if len(vertices1) > 3:
-                                break
-                            vertices1.append(vertices1.pop(0))
-                polygon_groups.append(vertices1)
-        return polygon_groups
+    def optimize_collision(self, bpy_collision_node):
+        bmesh_collision = bmesh.new()
+        bmesh_collision.from_mesh(bpy_collision_node.data)
+        bmesh.ops.triangulate(bmesh_collision, faces=bmesh_collision.faces)
+        bmesh.ops.dissolve_degenerate(bmesh_collision, edges=bmesh_collision.edges, dist=0.0001)
+        bmesh.ops.dissolve_limit(bmesh_collision, verts=bmesh_collision.verts, edges=bmesh_collision.edges, angle_limit=0.0175, delimit={'NORMAL'})
+        bmesh.ops.connect_verts_concave(bmesh_collision, faces=bmesh_collision.faces)
+        optimized_positions = [v.co for v in bmesh_collision.verts]
+        optimized_polygons = [[v.index for v in f.verts] for f in bmesh_collision.faces]
+        bmesh_collision.free()
+        return (optimized_positions, optimized_polygons)
 
     def optimize_mesh(self, bpy_polygons, name, components):
         positions = components['positions']
