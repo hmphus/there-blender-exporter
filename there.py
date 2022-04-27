@@ -42,6 +42,23 @@ class Material:
         CHROMAKEY = 4
         ADDITIVE = 5
 
+    class AnimationType(enum.IntEnum):
+        STATIC = 0
+        SCROLLING = 1
+        ONE_STRIP = 2
+        ALL_STRIPS = 3
+        RANDOM_STRIP = 4
+        BROWNIAN_MOTION = 5
+        RANDOM_FRAME = 6
+        SWAYING = 7
+        FRAME_LOOP = 8
+        SINGLE_FRAME = 9
+
+    class AnimationLoop(enum.IntEnum):
+        FORWARD = 0
+        REVERSE = 1
+        ALTERNATING = 2
+
     def __init__(self, name):
         self.name = name
         self.index = None
@@ -51,6 +68,13 @@ class Material:
         self.specular_power = None
         self.specular_color = None
         self.environment_color = None
+        self.animation_type = Material.AnimationType.STATIC
+        self.animation_loop = None
+        self.animation_strips = None
+        self.animation_frames = None
+        self.animation_speed = None
+        self.animation_arg_1 = None
+        self.animation_arg_2 = None
         self.textures = {}
 
 
@@ -471,6 +495,20 @@ class Preview:
             xml_material.append(Preview.Xml('twosided', material.is_two_sided))
             xml_material.append(Preview.Xml('lightmap', Material.Slot.LIGHTING in material.textures))
             xml_material.append(Preview.Xml('drawmode', material.draw_mode.value))
+            if material.animation_type != Material.AnimationType.STATIC:
+                xml_material.append(Preview.Xml('animtype', material.animation_type.value))
+                if material.animation_loop is not None:
+                    xml_material.append(Preview.Xml('animloop', material.animation_loop.value))
+                if material.animation_strips is not None:
+                    xml_material.append(Preview.Xml('numstrips', material.animation_strips))
+                if material.animation_frames is not None:
+                    xml_material.append(Preview.Xml('numframes', material.animation_frames))
+                if material.animation_speed is not None:
+                    xml_material.append(Preview.Xml('animspeed', material.animation_speed))
+                if material.animation_arg_1 is not None:
+                    xml_material.append(Preview.Xml('animarg', material.animation_arg_1))
+                if material.animation_arg_2 is not None:
+                    xml_material.append(Preview.Xml('animarg2', material.animation_arg_2))
             if material.specular_power is not None:
                 xml_material.append(Preview.Xml('specularpower', material.specular_power))
             if material.specular_color is not None:

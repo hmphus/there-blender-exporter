@@ -59,7 +59,7 @@ class ExportModelBase:
                 bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
             except IndexError:
                 raise RuntimeError('The root object was not found.')
-            self.gather_properties(bpy_node)
+            self.gather_node_properties(bpy_node)
             self.model.nodes.append(self.gather_nodes(bpy_node))
             assert self.model.nodes[0] is not None, 'The root object was not found.'
             context.window_manager.progress_update(25)
@@ -84,8 +84,8 @@ class ExportModelBase:
         context.window_manager.progress_end()
         return {'FINISHED'}
 
-    def gather_properties(self, bpy_node):
-        props = dict([[k.lower(), v] for k, v in bpy_node.items() if type(v) in [str, int, float]])
+    def gather_node_properties(self, bpy_node):
+        props = {k.lower(): v for k, v in bpy_node.items() if type(v) in [str, int, float]}
         distances = [int(props.get('lod%s' % i, [8, 20, 50, 400][i])) for i in range(4)]
         if distances[0] < 1:
             distances[0] = 1
@@ -212,6 +212,65 @@ class ExportModelBase:
                 self.gather_mix(bpy_material, bpy_link_node, material)
             else:
                 raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (material.name, bpy_link_node.name))
+            self.gather_material_properties(bpy_material, material)
+
+    def gather_material_properties(self, bpy_material, material):
+        props = {k.lower(): v for k, v in bpy_material.items() if type(v) in [str, int, float]}
+        if material.draw_mode != there.Material.DrawMode.DEFAULT:
+            try:
+                material.draw_mode = there.Material.DrawMode(int(props.get('draw mode')))
+            except (TypeError, ValueError):
+                pass
+        try:
+            material.animation_type = there.Material.AnimationType(int(props.get('animation type')))
+        except (TypeError, ValueError):
+            pass
+        if material.animation_type != there.Material.AnimationType.STATIC:
+            try:
+                material.animation_loop = there.Material.AnimationLoop(int(props.get('animation loop')))
+            except (TypeError, ValueError):
+                pass
+            try:
+                material.animation_strips = max(0, min(int(props.get('animation strip count')), 32))
+            except (TypeError, ValueError):
+                pass
+            try:
+                material.animation_frames = max(0, min(int(props.get('animation frame count')), 32))
+            except (TypeError, ValueError):
+                pass
+            try:
+                material.animation_speed = max(0.0, min(float(props.get('animation speed')), 100.0))
+            except (TypeError, ValueError):
+                pass
+            animation_arg_name_1 = None
+            animation_arg_name_2 = None
+            if material.animation_type == there.Material.AnimationType.SCROLLING:
+                animation_arg_name_1 = 'angle'
+                animation_arg_name_2 = 'inset'
+            elif material.animation_type == there.Material.AnimationType.ONE_STRIP:
+                animation_arg_name_1 = 'strip'
+            elif material.animation_type == there.Material.AnimationType.BROWNIAN_MOTION:
+                animation_arg_name_1 = 'multiplier'
+            elif material.animation_type == there.Material.AnimationType.RANDOM_FRAME:
+                animation_arg_name_2 = 'inset'
+            elif material.animation_type == there.Material.AnimationType.SWAYING:
+                animation_arg_name_1 = 'angle'
+                animation_arg_name_2 = 'amplitude'
+            elif material.animation_type == there.Material.AnimationType.FRAME_LOOP:
+                animation_arg_name_1 = 'start frame'
+                animation_arg_name_2 = 'end frame'
+            if animation_arg_name_1 is not None:
+                animation_arg_names = [animation_arg_name_1, 'argument 1', 'arg 1', 'argument', 'arg']
+                try:
+                    material.animation_arg_1 = max(-512.0, min(float([props.get('animation %s' % k) for k in animation_arg_names if k in props][0]), 512.0))
+                except (TypeError, ValueError, IndexError):
+                    pass
+            if animation_arg_name_2 is not None:
+                animation_arg_names = [animation_arg_name_2, 'argument 2', 'arg 2']
+                try:
+                    material.animation_arg_2 = max(-512.0, min(float([props.get('animation %s' % k) for k in animation_arg_names if k in props][0]), 512.0))
+                except (TypeError, ValueError, IndexError):
+                    pass
 
     def gather_there_bsdf(self, bpy_material, bpy_there_node, material):
         color_texture = self.gather_texture(bpy_there_node, 'Color')
