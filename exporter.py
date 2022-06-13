@@ -56,7 +56,7 @@ class ExportModelBase:
             self.model = there.Model(path=self.filepath)
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
-                bpy_node = [o for o in bpy_scene.objects if o.proxy is None and o.parent is None and o.type == 'EMPTY'][0]
+                bpy_node = [o for o in bpy_scene.objects if o.parent is None and o.type == 'EMPTY'][0]
             except IndexError:
                 raise RuntimeError('The root object was not found.')
             self.gather_node_properties(bpy_node)
@@ -594,7 +594,7 @@ class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
     )
 
 
-class ExportPreferences(bpy.types.AddonPreferences):
+class ExportModelPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
     save_preview: bpy.props.BoolProperty(
         name='Export Previewer Settings',
@@ -613,11 +613,11 @@ def menu_export_handler(self, context):
 
 def register_exporter():
     bpy.utils.register_class(ExportModel)
-    bpy.utils.register_class(ExportPreferences)
+    bpy.utils.register_class(ExportModelPreferences)
     bpy.types.TOPBAR_MT_file_export.append(menu_export_handler)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportModel)
-    bpy.utils.unregister_class(ExportPreferences)
+    bpy.utils.unregister_class(ExportModelPreferences)
     bpy.types.TOPBAR_MT_file_export.remove(menu_export_handler)
