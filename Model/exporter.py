@@ -50,7 +50,8 @@ class ExportModelBase:
     def execute(self, context):
         try:
             self.check(context)
-            assert bpy.context.mode != 'EDIT_MESH', 'Exporting while in Edit Mode is not supported.'
+            bpy.ops.object.mode_set(mode='OBJECT')
+            assert bpy.context.mode == 'OBJECT', 'Exporting must be done in Object Mode.'
             context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
             self.model = there.Model(path=self.filepath)
