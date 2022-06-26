@@ -9,6 +9,51 @@ from bpy_extras.io_utils import ExportHelper
 from . import there
 
 
+class Gender(enum.Enum):
+    FEMALE = ('Female', 0.24694)
+    MALE = ('Male', 0.24601)
+
+    def __init__(self, title, length):
+        self.title = title
+        self.skeleton = title[0].lower() + 't0'
+        self.length = length
+
+
+class Accoutrement(enum.Enum):
+    HAIR = (
+        'Hair', (
+            ('fc_hairscrunchy', 'HairScrunchy'),
+            ('hair', 'Hair'),
+        ), (
+            ('hair_round', 'Round'),
+            ('hair_square', 'Square'),
+            ('hair_tall', 'Tall'),
+            ('hair_wedge', 'Wedge'),
+            ('hair_pyramid', 'Pyramid'),
+            ('hair_eyesapart', 'EyesApart'),
+        )
+    )
+
+    def __init__(self, title, materials, phenomorphs):
+        self.title = title
+        self.materials = materials
+        self.phenomorphs = phenomorphs
+
+    def get_material_name(self, title):
+        title = title.lower()
+        for material in self.materials:
+            if material[1].lower() == title:
+                return material[0]
+        return None
+
+    def get_phenomorph_name(self, title):
+        title = title.lower()
+        for phenomorph in self.phenomorphs:
+            if phenomorph[1].lower() == title:
+                return phenomorph[0]
+        return None
+
+
 class ExportSkuteBase:
     save_style: bpy.props.BoolProperty(
         name='StyleMaker Settings',
@@ -61,7 +106,7 @@ class ExportSkuteBase:
                 bpy_armature = [o for o in bpy_scene.objects if o.parent is None and o.type == 'ARMATURE'][0]
             except IndexError:
                 raise RuntimeError('The armature object was not found.')
-            for gender in there.Gender:
+            for gender in Gender:
                 if gender.title.lower() == self.get_basename(bpy_armature.name).lower() and gender.length == round(bpy_armature.data.bones['Head'].length, 5):
                     self.gender = gender
                     break
@@ -77,6 +122,12 @@ class ExportSkuteBase:
             self.sort_lods()
             context.window_manager.progress_update(35)
             self.gather_materials()
+            context.window_manager.progress_update(45)
+            self.skute.save()
+            context.window_manager.progress_update(55)
+            if self.save_style:
+                style = there.Style(path=os.path.splitext(self.filepath)[0] + '.style', items=self.create_style_items())
+                style.save()
             context.window_manager.progress_update(100)
         except (RuntimeError, AssertionError) as error:
             self.report({'ERROR'}, str(error))
@@ -195,6 +246,7 @@ class ExportSkuteBase:
         distances = [15, 100, 1000]
         for index, lod in enumerate(self.skute.lods):
             lod.distance = distances[index]
+        # TODO: Check for all phenomorphs except for LOD2
 
     def gather_materials(self):
         self.skute.materials = list(self.skute.materials.values())
@@ -266,6 +318,37 @@ class ExportSkuteBase:
             return path
         return None
 
+    def create_style_items(self):
+        items = []
+        if self.accoutrement == Accoutrement.HAIR:
+            if self.gender == Gender.FEMALE:
+                item = there.Style.Item(kit_id=2007, skute=self.skute)
+                piece = there.Style.Piece(piece_id=2007, texture_id=22007)
+                item.pieces.append(piece)
+                items.append(item)
+                item = there.Style.Item(kit_id=900)
+                piece = there.Style.Piece(piece_id=900, texture_id=30900)
+                item.pieces.append(piece)
+                items.append(item)
+                item = there.Style.Item(kit_id=1201)
+                piece = there.Style.Piece(piece_id=1201, texture_id=11201)
+                item.pieces.append(piece)
+                items.append(item)
+            if self.gender == Gender.MALE:
+                item = there.Style.Item(kit_id=2507, skute=self.skute)
+                piece = there.Style.Piece(piece_id=2507, texture_id=12507)
+                item.pieces.append(piece)
+                items.append(item)
+                item = there.Style.Item(kit_id=901)
+                piece = there.Style.Piece(piece_id=901, texture_id=30901)
+                item.pieces.append(piece)
+                items.append(item)
+                item = there.Style.Item(kit_id=1708)
+                piece = there.Style.Piece(piece_id=1708, texture_id=11708)
+                item.pieces.append(piece)
+                items.append(item)
+        return items
+
     @staticmethod
     def get_basename(name):
         return re.sub(r'\.\d+$', '', name)
@@ -284,7 +367,7 @@ class ExportSkute(bpy.types.Operator, ExportSkuteBase, ExportHelper):
         default='*.skute',
         options={'HIDDEN'},
     )
-    accoutrement = there.Accoutrement.HAIR
+    accoutrement = Accoutrement.HAIR
 
 
 class ExportSkutePreferences(bpy.types.AddonPreferences):
