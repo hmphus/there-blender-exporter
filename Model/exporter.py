@@ -290,7 +290,7 @@ class ExportModelBase:
             if color_texture is not None:
                 emission_texture = color_texture
                 color_texture = None
-                self.report({'WARNING'}, 'Material "%s" is using a Base Color image for baked lighting.' % material.name)
+                self.report({'WARNING'}, 'Material "%s" is using a Color image for baked lighting.' % material.name)
             if emission_texture is None:
                 raise RuntimeError('Material "%s" needs an Emission image.' % material.name)
             if detail_color_texture is not None:
@@ -308,7 +308,7 @@ class ExportModelBase:
                 if lighting_texture is not None:
                     material.textures[there.Material.Slot.LIGHTING] = lighting_texture
             else:
-                raise RuntimeError('Material "%s" needs a Base Color or Emission image.' % material.name)
+                raise RuntimeError('Material "%s" needs a Color or Emission image.' % material.name)
         if bpy_material.blend_method == 'CLIP':
             if alpha_texture is not None:
                 if alpha_texture == color_texture:

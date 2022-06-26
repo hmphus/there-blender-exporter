@@ -1,4 +1,4 @@
-# Blender exporter for There.com models
+# Blender exporter for There.com designs
 
 ## MIT License
 
