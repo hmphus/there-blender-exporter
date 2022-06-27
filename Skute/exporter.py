@@ -9,6 +9,12 @@ from bpy_extras.io_utils import ExportHelper
 from . import there
 
 
+class Object:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 class Gender(enum.Enum):
     FEMALE = ('Female', 0.24694)
     MALE = ('Male', 0.24601)
@@ -22,15 +28,15 @@ class Gender(enum.Enum):
 class Accoutrement(enum.Enum):
     HAIR = (
         'Hair', (
-            ('fc_hairscrunchy', 'HairScrunchy'),
-            ('hair', 'Hair'),
+            Object(name='fc_hairscrunchy', title='HairScrunchy'),
+            Object(name='hair', title='Hair'),
         ), (
-            ('hair_round', 'Round'),
-            ('hair_square', 'Square'),
-            ('hair_tall', 'Tall'),
-            ('hair_wedge', 'Wedge'),
-            ('hair_pyramid', 'Pyramid'),
-            ('hair_eyesapart', 'EyesApart'),
+            Object(name='hair_round', title='Round'),
+            Object(name='hair_square', title='Square'),
+            Object(name='hair_tall', title='Tall'),
+            Object(name='hair_wedge', title='Wedge'),
+            Object(name='hair_pyramid', title='Pyramid'),
+            Object(name='hair_eyesapart', title='EyesApart'),
         )
     )
 
@@ -42,15 +48,21 @@ class Accoutrement(enum.Enum):
     def get_material_name(self, title):
         title = title.lower()
         for material in self.materials:
-            if material[1].lower() == title:
-                return material[0]
+            if material.title.lower() == title:
+                return material.name
         return None
 
     def get_phenomorph_name(self, title):
         title = title.lower()
         for phenomorph in self.phenomorphs:
-            if phenomorph[1].lower() == title:
-                return phenomorph[0]
+            if phenomorph.title.lower() == title:
+                return phenomorph.name
+        return None
+
+    def get_phenomorph_title(self, name):
+        for phenomorph in self.phenomorphs:
+            if phenomorph.name == name:
+                return phenomorph.title
         return None
 
 
@@ -123,8 +135,12 @@ class ExportSkuteBase:
             context.window_manager.progress_update(35)
             self.gather_materials()
             context.window_manager.progress_update(45)
-            self.skute.save()
+            self.normalize_weights()
+            context.window_manager.progress_update(45)
+            self.scale_skute()
             context.window_manager.progress_update(55)
+            self.skute.save()
+            context.window_manager.progress_update(65)
             if self.save_style:
                 style = there.Style(path=os.path.splitext(self.filepath)[0] + '.style', items=self.create_style_items())
                 style.save()
@@ -146,31 +162,31 @@ class ExportSkuteBase:
             matrix_rotation = matrix_skute.to_quaternion().to_matrix()
             bpy_lod.data.calc_normals_split()
             bpy_lod.data.calc_tangents()
-            components = {
-                'positions': [[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_lod.data.vertices]],
-                'indices': [v.vertex_index for v in bpy_lod.data.loops],
-                'normals': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_lod.data.loops]],
-                'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_lod.data.uv_layers][:1],
-                'bones': [bone_lookup[g.name] for g in bpy_lod.vertex_groups],
-                'weights': [{g.group: g.weight for g in v.groups} for v in bpy_lod.data.vertices],
-                'shapes': [],
-            }
-            optimized = {
-                'vertices': [],
-                'map': {},
-                'shapes': [],
-            }
+            components = Object(
+                positions=[[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_lod.data.vertices]],
+                indices=[v.vertex_index for v in bpy_lod.data.loops],
+                normals=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_lod.data.loops]],
+                uvs=[[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_lod.data.uv_layers][:1],
+                bones=[bone_lookup[g.name] for g in bpy_lod.vertex_groups],
+                weights=[{g.group: g.weight for g in v.groups} for v in bpy_lod.data.vertices],
+                shapes=[],
+            )
+            optimized = Object(
+                vertices=[],
+                map={},
+                shapes=[],
+            )
             if bpy_lod.data.shape_keys is not None:
                 for bpy_shape in bpy_lod.data.shape_keys.key_blocks[1:]:
                     name = self.accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name))
                     if name is None:
                         continue
-                    shape = {
-                        'index': len(components['shapes']),
-                        'positions': [[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_shape.data]],
-                    }
-                    components['shapes'].append(shape)
-                    optimized['shapes'].append(there.Target(name=name))
+                    shape = Object(
+                        index=len(components.shapes),
+                        positions=[[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_shape.data]],
+                    )
+                    components.shapes.append(shape)
+                    optimized.shapes.append(there.Target(name=name))
             bpy_lod.data.free_tangents()
             bpy_lod.data.free_normals_split()
             for index, name in enumerate(bpy_lod.material_slots.keys()):
@@ -185,21 +201,21 @@ class ExportSkuteBase:
                 if len(mesh.indices) == 0:
                     continue
                 lod.meshes.append(mesh)
-            lod.vertices = optimized['vertices']
-            lod.phenomorphs = optimized['shapes']
+            lod.vertices = optimized.vertices
+            lod.phenomorphs = optimized.shapes
             lod.vertex_count += len(lod.vertices)
             for mesh in lod.meshes:
                 lod.face_count += len(mesh.indices) // 3
             self.skute.lods.append(lod)
 
     def optimize_mesh(self, bpy_polygons, components, optimized):
-        positions = components['positions']
-        indices = components['indices']
-        normals = components['normals']
-        uvs = components['uvs']
-        bones = components['bones']
-        weights = components['weights']
-        shapes = components['shapes']
+        positions = components.positions
+        indices = components.indices
+        normals = components.normals
+        uvs = components.uvs
+        bones = components.bones
+        weights = components.weights
+        shapes = components.shapes
         if len(uvs) == 0:
             uvs = [(0.0, 0.0)] * len(normals)
         else:
@@ -216,11 +232,11 @@ class ExportSkuteBase:
                         '%.03f:%.03f:%.03f' % (normals[index][0], normals[index][1], normals[index][2]),
                         '%.03f:%.03f' % (uvs[index][0], uvs[index][1]),
                     )
-                    optimized_index = optimized['map'].get(key)
+                    optimized_index = optimized.map.get(key)
                     if optimized_index is None:
-                        optimized_index = len(optimized['vertices'])
-                        optimized['map'][key] = optimized_index
-                        optimized['vertices'].append(there.LOD.Vertex(
+                        optimized_index = len(optimized.vertices)
+                        optimized.map[key] = optimized_index
+                        optimized.vertices.append(there.LOD.Vertex(
                             position=positions[indices[index]],
                             normal=normals[index],
                             uv=uvs[index],
@@ -228,13 +244,13 @@ class ExportSkuteBase:
                             bone_weights=[v for v in weights[indices[index]].values()],
                         ))
                         for shape in shapes:
-                            delta_position = [v[0] - v[1] for v in zip(positions[indices[index]], shape['positions'][indices[index]])]
+                            delta_position = [v[0] - v[1] for v in zip(positions[indices[index]], shape.positions[indices[index]])]
                             if self.is_close(delta_position, (0.0, 0.0, 0.0)):
                                 continue
-                            optimized['shapes'][shape['index']].deltas.append(there.Target.Delta(
+                            optimized.shapes[shape.index].deltas.append(there.Target.Delta(
                                 index=optimized_index,
                                 position=delta_position,
-                                normal=None,  # TODO: Add normal
+                                normal=(0.0, 0.0, 0.0),  # TODO: Add normal
                             ))
                     optimized_indices.append(optimized_index)
         return optimized_indices
@@ -242,11 +258,47 @@ class ExportSkuteBase:
     def sort_lods(self):
         self.skute.lods.sort(key=operator.attrgetter('vertex_count'), reverse=True)
         if len(self.skute.lods) != 3:
-            raise RuntimeError('%s should contain 3 LODs.' % self.accoutrement.title)
-        distances = [15, 100, 1000]
+            raise RuntimeError('"%s" should contain 3 LODs.' % self.accoutrement.title)
+        if self.accoutrement == Accoutrement.HAIR:
+            spec_distances = (15, 100, 1000)
+            spec_vertex_counts = (600, 450, 250)
+            spec_face_counts = (1100, 800, 450)
+            if self.gender == Gender.FEMALE:
+                spec_bounds = ((-0.35, 0.25, -0.35), (0.35, 1.2, 0.35))
+            else:
+                spec_bounds = ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35))
+        else:
+            raise RuntimeError('"%s" is not configured.' % self.accoutrement.title)
         for index, lod in enumerate(self.skute.lods):
-            lod.distance = distances[index]
-        # TODO: Check for all phenomorphs except for LOD2
+            lod.index = index
+            lod.distance = spec_distances[index]
+            if lod.vertex_count > spec_vertex_counts[index]:
+                raise RuntimeError('LOD%s contains too many vertices.' % index)
+            if lod.face_count > spec_face_counts[index]:
+                raise RuntimeError('LOD%s contains too many faces.' % index)
+            if index < 2:
+                lod_phenomorphs = [p.name for p in lod.phenomorphs]
+                for phenomorph in self.accoutrement.phenomorphs:
+                    if phenomorph.name not in lod_phenomorphs:
+                        raise RuntimeError('LOD%s should contain a "%s" shape key.' % (index, phenomorph.title))
+            else:
+                lod.phenomorphs = []
+            lod.bounds = [
+                [min([v.position[i] for v in lod.vertices]) for i in range(3)],
+                [max([v.position[i] for v in lod.vertices]) for i in range(3)],
+            ]
+            if False in [lod.bounds[0][i] >= spec_bounds[0][i] and lod.bounds[1][i] <= spec_bounds[1][i] for i in range(3)]:
+                raise RuntimeError('LOD%s is outside the bounding box.' % index)
+            for phenomorph in lod.phenomorphs:
+                if len(phenomorph.deltas) == 0:
+                    continue
+                phenomorph.bounds = [
+                    [min([z[0].position[i] + z[1].position[i] for z in zip(lod.vertices, phenomorph.deltas)]) for i in range(3)],
+                    [max([z[0].position[i] + z[1].position[i] for z in zip(lod.vertices, phenomorph.deltas)]) for i in range(3)],
+                ]
+                if False in [phenomorph.bounds[0][i] >= spec_bounds[0][i] and phenomorph.bounds[1][i] <= spec_bounds[1][i] for i in range(3)]:
+                    name = self.accoutrement.get_phenomorph_title(phenomorph.name)
+                    raise RuntimeError('LOD%s with "%s" shape is outside the bounding box.' % (index, name))
 
     def gather_materials(self):
         self.skute.materials = list(self.skute.materials.values())
@@ -283,6 +335,11 @@ class ExportSkuteBase:
                 self.gather_diffuse_bsdf(bpy_material, bpy_link_node, material)
             else:
                 raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (bpy_material.name, bpy_link_node.name))
+        for material in self.accoutrement.materials:
+            if material.name.startswith('fc_'):
+                continue
+            if len([m for m in self.skute.materials if m.name == material.name and m.texture is not None]) == 0:
+                raise RuntimeError('Material "%s" is missing.' % (material.title))
 
     def gather_there_bsdf(self, bpy_material, bpy_there_node, material):
         material.texture = self.gather_texture(bpy_there_node, 'Color')
@@ -348,6 +405,39 @@ class ExportSkuteBase:
                 item.pieces.append(piece)
                 items.append(item)
         return items
+
+    def normalize_weights(self):
+        for lod in self.skute.lods:
+            for vertex in lod.vertices:
+                values = sorted([v for v in zip(vertex.bone_indices, vertex.bone_weights) if v[1] > 0.0], key=lambda v: v[1], reverse=True)
+                total = sum([v[1] for v in values] + [0.0])
+                count = len(values)
+                if count == 0 or total < 0.1:
+                    raise RuntimeError('LOD%s is not rigged to the armature bones.' % lod.index)
+                elif count == 1:
+                    values.append([values[0][0], 0.0])
+                else:
+                    raise RuntimeError('LOD%s is rigged to more than 2 bones per vertex.' % lod.index)
+                vertex.bone_indices = [v[0] for v in values]
+                vertex.bone_weights = [v[1] / total for v in values]
+
+    def scale_skute(self):
+        scales = [(s, pow(2.0, s - 32)) for s in range(32, 34)]
+        try:
+            value = max([abs(v) for o in self.skute.lods for b in o.bounds for v in b])
+        except ValueError:
+            value = 0.0
+        try:
+            scale = [s for s in scales if value <= s[1]][0]
+        except IndexError:
+            raise RuntimeError('The skute is too big to export.')
+        self.skute.scale = scale[0]
+        for lod in self.skute.lods:
+            for vertex in lod.vertices:
+                vertex.position = [v / scale[1] for v in vertex.position]
+            for phenomorph in lod.phenomorphs:
+                for delta in phenomorph.deltas:
+                    delta.position = [v / scale[1] for v in delta.position]
 
     @staticmethod
     def get_basename(name):

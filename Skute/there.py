@@ -31,6 +31,7 @@ class LOD:
         self.morphs = []
         self.vertex_count = 0
         self.face_count = 0
+        self.bounds = None
 
 
 class Mesh:
@@ -50,6 +51,7 @@ class Target:
         self.name = name
         self.deltas = []
         self.phenomorphs = []
+        self.bounds = None
 
 
 class Skute:
@@ -61,7 +63,54 @@ class Skute:
         self.materials = {}
 
     def save(self):
-        pass
+        import json
+        data = {
+            'scale': self.scale,
+            'skeleton': self.skeleton,
+            'lods': [],
+            'materials': [],
+        }
+        for index, lod in enumerate(self.lods):
+            data['lods'].append({
+                'index': index,
+                'distance': lod.distance,
+                'vertices': [{
+                    'pos_x': vertex.position[0],
+                    'pos_y': vertex.position[1],
+                    'pos_z': vertex.position[2],
+                    'norm_x': vertex.normal[0],
+                    'norm_y': vertex.normal[1],
+                    'norm_z': vertex.normal[2],
+                    'map_u': vertex.uv[0],
+                    'map_v': vertex.uv[1],
+                    'bone_index_0': None if len(vertex.bone_indices) < 1 else vertex.bone_indices[0],
+                    'bone_index_1': None if len(vertex.bone_indices) < 2 else vertex.bone_indices[1],
+                    'bone_weight_0': 0.0 if len(vertex.bone_weights) < 1 else vertex.bone_weights[0],
+                    'bone_weight_1': 0.0 if len(vertex.bone_weights) < 2 else vertex.bone_weights[1],
+                } for vertex in lod.vertices],
+                'meshes': [{
+                    'indices': mesh.indices,
+                    'material_index': mesh.material.index,
+                } for mesh in lod.meshes],
+                'phenomorphs': [{
+                    'name': target.name,
+                    'deltas': [{
+                        'index': delta.index,
+                        'pos_x': delta.position[0],
+                        'pos_y': delta.position[1],
+                        'pos_z': delta.position[2],
+                        'norm_x': delta.normal[0],
+                        'norm_y': delta.normal[1],
+                        'norm_z': delta.normal[2],
+                    } for delta in target.deltas],
+                } for target in lod.phenomorphs],
+            })
+        for material in self.materials:
+            data['materials'].append({
+                'name': material.name,
+            })
+        with open(os.path.splitext(self.path)[0] + '.json', 'w') as file:
+            json.dump(data, file, indent=4)
 
 
 class Style:

@@ -8,6 +8,12 @@ from bpy_extras.io_utils import ExportHelper
 from . import there
 
 
+class Object:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 class ExportModelBase:
     save_preview: bpy.props.BoolProperty(
         name='Previewer Settings',
@@ -69,9 +75,9 @@ class ExportModelBase:
             self.flatten_nodes()
             context.window_manager.progress_update(45)
             self.gather_materials()
-            context.window_manager.progress_update(50)
+            context.window_manager.progress_update(55)
             self.flatten_meshes()
-            context.window_manager.progress_update(60)
+            context.window_manager.progress_update(65)
             self.scale_meshes()
             context.window_manager.progress_update(75)
             self.model.save()
@@ -131,21 +137,21 @@ class ExportModelBase:
                 else:
                     bpy_node.data.calc_normals_split()
                     bpy_node.data.calc_tangents()
-                    components = {
-                        'positions': [[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
-                        'indices': [v.vertex_index for v in bpy_node.data.loops],
-                        'normals': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
-                        'tangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
-                        'bitangents': [[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
-                        'colors': [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
-                        'uvs': [[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
-                    }
-                    if len(components['colors']) == 1:
-                        for color in components['colors'][0]:
+                    components = Object(
+                        positions=[[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
+                        indices=[v.vertex_index for v in bpy_node.data.loops],
+                        normals=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
+                        tangents=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
+                        bitangents=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
+                        colors=[[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
+                        uvs=[[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
+                    )
+                    if len(components.colors) == 1:
+                        for color in components.colors[0]:
                             if color != 0xFFFFFFFF:
                                 break
                         else:
-                            del components['colors'][0]
+                            del components.colors[0]
                     bpy_node.data.free_tangents()
                     bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
@@ -156,7 +162,7 @@ class ExportModelBase:
                     bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
                     if len(bpy_polygons) == 0:
                         continue
-                    mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, name=name, components=components)
+                    mesh.vertices, mesh.indices = self.optimize_mesh(bpy_polygons=bpy_polygons, components=components)
                     if len(mesh.vertices) == 0 or len(mesh.indices) == 0 or len(mesh.vertices[0].uvs) == 0:
                         continue
                     node.meshes.append(mesh)
@@ -500,14 +506,14 @@ class ExportModelBase:
         bmesh_collision.free()
         return (optimized_positions, optimized_polygons)
 
-    def optimize_mesh(self, bpy_polygons, name, components):
-        positions = components['positions']
-        indices = components['indices']
-        normals = components['normals']
-        tangents = components['tangents']
-        bitangents = components['bitangents']
-        colors = components['colors']
-        uvs = components['uvs']
+    def optimize_mesh(self, bpy_polygons, components):
+        positions = components.positions
+        indices = components.indices
+        normals = components.normals
+        tangents = components.tangents
+        bitangents = components.bitangents
+        colors = components.colors
+        uvs = components.uvs
         optimized_vertices = []
         optimized_indices = []
         optimized_map = {}
@@ -565,7 +571,7 @@ class ExportModelBase:
             try:
                 value = max([max([max([abs(p) for p in v.position]) for v in m.vertices]) for m in lod.meshes])
             except ValueError:
-                value = 0
+                value = 0.0
             try:
                 scale = [s for s in scales if value <= s[1]][0]
             except IndexError:
@@ -573,7 +579,7 @@ class ExportModelBase:
             lod.scale = scale[0]
             for mesh in lod.meshes:
                 for vertex in mesh.vertices:
-                    vertex.position = [n / scale[1] for n in vertex.position]
+                    vertex.position = [v / scale[1] for v in vertex.position]
 
     @staticmethod
     def is_close(a, b):
