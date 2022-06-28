@@ -3,8 +3,8 @@ import re
 import bpy
 import enum
 import math
-import bmesh
 import operator
+import mathutils
 from bpy_extras.io_utils import ExportHelper
 from . import there
 
@@ -161,7 +161,6 @@ class ExportSkuteBase:
             matrix_skute = matrix_root_inverted @ bpy_lod.matrix_world
             matrix_rotation = matrix_skute.to_quaternion().to_matrix()
             bpy_lod.data.calc_normals_split()
-            bpy_lod.data.calc_tangents()
             components = Object(
                 positions=[[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_lod.data.vertices]],
                 indices=[v.vertex_index for v in bpy_lod.data.loops],
@@ -181,13 +180,15 @@ class ExportSkuteBase:
                     name = self.accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name))
                     if name is None:
                         continue
+                    shape_normals = bpy_shape.normals_split_get()
+                    shape_normals = [mathutils.Vector(shape_normals[i:i + 3]) for i in range(0, len(shape_normals), 3)]
                     shape = Object(
                         index=len(components.shapes),
                         positions=[[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_shape.data]],
+                        normals=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v).normalized() for v in shape_normals]],
                     )
                     components.shapes.append(shape)
                     optimized.shapes.append(there.Target(name=name))
-            bpy_lod.data.free_tangents()
             bpy_lod.data.free_normals_split()
             for index, name in enumerate(bpy_lod.material_slots.keys()):
                 if name not in self.skute.materials:
@@ -244,13 +245,14 @@ class ExportSkuteBase:
                             bone_weights=[v for v in weights[indices[index]].values()],
                         ))
                         for shape in shapes:
-                            delta_position = [v[0] - v[1] for v in zip(positions[indices[index]], shape.positions[indices[index]])]
+                            delta_position = [v[0] - v[1] for v in zip(shape.positions[indices[index]], positions[indices[index]])]
                             if self.is_close(delta_position, (0.0, 0.0, 0.0)):
                                 continue
+                            delta_normal = [v[0] - v[1] for v in zip(shape.normals[index], normals[index])]
                             optimized.shapes[shape.index].deltas.append(there.Target.Delta(
                                 index=optimized_index,
                                 position=delta_position,
-                                normal=(0.0, 0.0, 0.0),  # TODO: Add normal
+                                normal=delta_normal,
                             ))
                     optimized_indices.append(optimized_index)
         return optimized_indices
