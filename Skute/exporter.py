@@ -157,6 +157,9 @@ class ExportSkuteBase:
         for bpy_lod in bpy_object.children:
             if bpy_lod.type != 'MESH':
                 continue
+            for bpy_vertex_group in bpy_lod.vertex_groups:
+                if bpy_vertex_group.name not in bone_lookup:
+                    raise RuntimeError('Vertex group "%s" does not refer to a bone.' % bpy_vertex_group.name)
             lod = there.LOD()
             matrix_skute = matrix_root_inverted @ bpy_lod.matrix_world
             matrix_rotation = matrix_skute.to_quaternion().to_matrix()
