@@ -29,6 +29,7 @@ class Accoutrement(enum.Enum):
     HAIR = (
         'Hair', (
             Object(name='fc_hairscrunchy', title='HairScrunchy'),
+            Object(name='fc_eyebrow', title='Eyebrow'),
             Object(name='hair', title='Hair'),
         ), (
             Object(name='hair_round', title='Round'),
