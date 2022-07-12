@@ -104,7 +104,7 @@ class ExportModelBase:
     def gather_nodes(self, bpy_node, level=0, matrix_root_inverted=None):
         if bpy_node.type not in ['EMPTY', 'MESH']:
             return None
-        node = there.Node(name=re.sub(r'\.\d+$', '', bpy_node.name))
+        node = there.Node(name=self.get_basename(bpy_node.name))
         if level == 0:
             matrix_root_inverted = bpy_node.matrix_local.inverted()
             node.position = [0.0, 0.0, 0.0]
@@ -186,7 +186,7 @@ class ExportModelBase:
         node.index = len(self.model.nodes)
         node.parent_index = parent_index
         self.model.nodes.append(node)
-        for child in node.children:
+        for child in sorted(node.children, key=lambda n: self.get_basename(n.name)):
             self.flatten_nodes(child, node.index)
 
     def gather_materials(self):
@@ -561,7 +561,7 @@ class ExportModelBase:
             lod.meshes.append(mesh)
         del node.meshes
         node_index += 1
-        for child in node.children:
+        for child in sorted(node.children, key=lambda n: self.get_basename(n.name)):
             node_index = self.flatten_meshes(lod=lod, node=child, node_index=node_index)
         return node_index
 
@@ -580,6 +580,10 @@ class ExportModelBase:
             for mesh in lod.meshes:
                 for vertex in mesh.vertices:
                     vertex.position = [v / scale[1] for v in vertex.position]
+
+    @staticmethod
+    def get_basename(name):
+        return re.sub(r'\.\d+$', '', name)
 
     @staticmethod
     def is_close(a, b):
