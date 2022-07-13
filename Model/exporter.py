@@ -604,6 +604,10 @@ class ExportModel(bpy.types.Operator, ExportModelBase, ExportHelper):
         options={'HIDDEN'},
     )
 
+    @staticmethod
+    def handle_menu_export(self, context):
+        self.layout.operator(ExportModel.bl_idname, text='There Model (.model)')
+
 
 class ExportModelPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -618,17 +622,13 @@ class ExportModelPreferences(bpy.types.AddonPreferences):
         layout.prop(self, 'save_preview')
 
 
-def menu_export_handler(self, context):
-    self.layout.operator(ExportModel.bl_idname, text='There Model (.model)')
-
-
 def register_exporter():
     bpy.utils.register_class(ExportModel)
     bpy.utils.register_class(ExportModelPreferences)
-    bpy.types.TOPBAR_MT_file_export.append(menu_export_handler)
+    bpy.types.TOPBAR_MT_file_export.append(ExportModel.handle_menu_export)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportModel)
     bpy.utils.unregister_class(ExportModelPreferences)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_export_handler)
+    bpy.types.TOPBAR_MT_file_export.remove(ExportModel.handle_menu_export)

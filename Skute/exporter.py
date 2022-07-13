@@ -5,6 +5,7 @@ import enum
 import math
 import operator
 import mathutils
+import bpy.utils.previews
 from bpy_extras.io_utils import ExportHelper
 from . import there
 
@@ -38,13 +39,16 @@ class Accoutrement(enum.Enum):
             Object(name='hair_wedge', title='Wedge'),
             Object(name='hair_pyramid', title='Pyramid'),
             Object(name='hair_eyesapart', title='EyesApart'),
-        )
+        ), True
     )
+    HEAD = ('Head', (), (), False)
+    UPPERBODY = ('UpperBody', (), (), False)
 
-    def __init__(self, title, materials, phenomorphs):
+    def __init__(self, title, materials, phenomorphs, is_valid):
         self.title = title
         self.materials = materials
         self.phenomorphs = phenomorphs
+        self.is_valid = is_valid
 
     def get_material_name(self, title):
         title = title.lower()
@@ -129,6 +133,8 @@ class ExportSkuteBase:
                 bpy_object = [o for o in bpy_armature.children if o.type == 'EMPTY' and self.get_basename(o.name).lower() == self.accoutrement.title.lower()][0]
             except IndexError:
                 raise RuntimeError('The "%s" object was not found.' % self.accoutrement.title)
+            if not self.accoutrement.is_valid:
+                raise RuntimeError('The accoutrement is not valid.')
             self.skute.skeleton = self.gender.skeleton
             self.gather_lods(bpy_armature, bpy_object)
             context.window_manager.progress_update(25)
@@ -465,6 +471,10 @@ class ExportSkute(bpy.types.Operator, ExportSkuteBase, ExportHelper):
     )
     accoutrement = Accoutrement.HAIR
 
+    @staticmethod
+    def handle_menu_export(self, context):
+        self.layout.operator(ExportSkute.bl_idname, text='There Skute (.skute)')
+
 
 class ExportSkutePreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -479,17 +489,192 @@ class ExportSkutePreferences(bpy.types.AddonPreferences):
         layout.prop(self, 'save_style')
 
 
-def menu_export_handler(self, context):
-    self.layout.operator(ExportSkute.bl_idname, text='There Skute (.skute)')
+class ThereLODOperator(bpy.types.Operator):
+    bl_idname = __package__ + '.set_lod'
+    bl_label = 'LOD'
+    bl_description = 'Show LOD in viewport'
+    id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        id = self.id.lower()
+        bpy_lods = ThereOutlinerPanel.get_lods(context)
+        for bpy_lod in bpy_lods:
+            name = ThereOutlinerPanel.get_basename(bpy_lod.name).lower()
+            bpy_lod.hide_set(name != id)
+        return {'FINISHED'}
+
+    @classmethod
+    def is_depressed(cls, context, id):
+        id = id.lower()
+        bpy_lods = ThereOutlinerPanel.get_lods(context)
+        if len(bpy_lods) == 0:
+            return False
+        for bpy_lod in bpy_lods:
+            name = ThereOutlinerPanel.get_basename(bpy_lod.name).lower()
+            if bpy_lod.hide_get() != (name != id):
+                return False
+        return True
+
+
+class ThereShapeKeyOperator(bpy.types.Operator):
+    bl_idname = __package__ + '.set_shapekey'
+    bl_label = 'SHAPEKEY'
+    bl_description = 'Show shape key in viewport (hold Ctrl for multiple)'
+    id: bpy.props.StringProperty()
+
+    def execute(self, context):
+        id = self.id.lower()
+        states = {}
+        bpy_lods = [b for b in ThereOutlinerPanel.get_lods(context) if b.data.shape_keys is not None]
+        for bpy_lod in bpy_lods:
+            for shape_key in bpy_lod.data.shape_keys.key_blocks:
+                name = shape_key.name.lower()
+                if name == 'basis':
+                    continue
+                if name not in states:
+                    states[name] = shape_key.mute
+                else:
+                    states[name] = states[name] or shape_key.mute
+        for bpy_lod in bpy_lods:
+            for shape_key in bpy_lod.data.shape_keys.key_blocks:
+                name = shape_key.name.lower()
+                if name == 'basis':
+                    continue
+                if id == 'basis':
+                    shape_key.mute = True
+                elif name == id:
+                    shape_key.mute = not states[name] if name in states else False
+                elif not self.ctrl:
+                    shape_key.mute = True
+                if not shape_key.mute:
+                    shape_key.value = 1.0
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        self.ctrl = event.ctrl
+        return self.execute(context)
+
+    @classmethod
+    def poll(cls, context):
+        bpy_lods = [b for b in ThereOutlinerPanel.get_lods(context) if b.data.shape_keys is not None and not b.hide_get()]
+        if len(bpy_lods) == 0:
+            return False
+        for bpy_lod in bpy_lods:
+            for shape_key in bpy_lod.data.shape_keys.key_blocks:
+                name = shape_key.name.lower()
+                if name == 'basis':
+                    continue
+                return True
+        return False
+
+    @classmethod
+    def is_depressed(cls, context, id):
+        id = id.lower()
+        bpy_accoutrements = ThereOutlinerPanel.get_accoutrements(context)
+        if len(bpy_accoutrements) == 0:
+            return False
+        shape_key = None
+        bpy_lods = [b for b in ThereOutlinerPanel.get_lods(context) if b.data.shape_keys is not None and not b.hide_get()]
+        for bpy_lod in bpy_lods:
+            for shape_key in bpy_lod.data.shape_keys.key_blocks:
+                name = shape_key.name.lower()
+                if name == 'basis':
+                    continue
+                if id == 'basis':
+                    if not shape_key.mute:
+                        return False
+                elif name == id:
+                    if shape_key.mute:
+                        return False
+        return shape_key is not None or id == 'basis'
+
+
+class ThereOutlinerPanel(bpy.types.Panel):
+    bl_idname = 'OUTLINER_PT_there_skute'
+    bl_space_type = 'OUTLINER'
+    bl_region_type = 'HEADER'
+    bl_label = 'There Helper'
+    previews = None
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text='LODs')
+        row = layout.row()
+        for text in ['LOD0', 'LOD1', 'LOD2']:
+            row.operator(ThereLODOperator.bl_idname, text=text, depress=ThereLODOperator.is_depressed(context, text)).id = text
+        layout.label(text='Shape Keys')
+        text = 'Basis'
+        layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
+        for phenomorph in Accoutrement.HAIR.phenomorphs:
+            text = phenomorph.title
+            layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
+
+    @classmethod
+    def poll(cls, context):
+        bpy_armature = ThereOutlinerPanel.get_armature(context)
+        if bpy_armature is None:
+            return False
+        return True
+
+    @staticmethod
+    def get_basename(name):
+        return re.sub(r'\.\d+$', '', name)
+
+    @staticmethod
+    def get_armature(context):
+        bpy_scene = context.scene
+        bpy_armatures = [o for o in bpy_scene.objects if o.parent is None and o.type == 'ARMATURE']
+        if len(bpy_armatures) == 0:
+            return None
+        bpy_armature = bpy_armatures[0]
+        if ThereOutlinerPanel.get_basename(bpy_armature.name).lower() not in [e.title.lower() for e in Gender]:
+            return None
+        return bpy_armature
+
+    @staticmethod
+    def get_accoutrements(context):
+        bpy_armature = ThereOutlinerPanel.get_armature(context)
+        if bpy_armature is None:
+            return []
+        return [o for o in bpy_armature.children if o.type == 'EMPTY' and ThereOutlinerPanel.get_basename(o.name).lower() in [e.title.lower() for e in Accoutrement]]
+
+    @staticmethod
+    def get_lods(context):
+        bpy_lods = []
+        bpy_accoutrements = ThereOutlinerPanel.get_accoutrements(context)
+        for bpy_accoutrement in bpy_accoutrements:
+            for bpy_lod in bpy_accoutrement.children:
+                name = ThereOutlinerPanel.get_basename(bpy_lod.name).lower()
+                if not name.startswith('lod') or bpy_lod.type != 'MESH':
+                    continue
+                bpy_lods.append(bpy_lod)
+        return bpy_lods
+
+    @staticmethod
+    def handle_outliner_header(self, context):
+        layout = self.layout
+        if context.space_data.display_mode == 'VIEW_LAYER' and ThereOutlinerPanel.poll(context):
+            layout.popover(ThereOutlinerPanel.bl_idname, text='', icon_value=ThereOutlinerPanel.previews['THERE_SKUTE_HELPER'].icon_id)
 
 
 def register_exporter():
     bpy.utils.register_class(ExportSkute)
     bpy.utils.register_class(ExportSkutePreferences)
-    bpy.types.TOPBAR_MT_file_export.append(menu_export_handler)
+    bpy.utils.register_class(ThereLODOperator)
+    bpy.utils.register_class(ThereShapeKeyOperator)
+    bpy.utils.register_class(ThereOutlinerPanel)
+    ThereOutlinerPanel.previews = bpy.utils.previews.new()
+    ThereOutlinerPanel.previews.load('THERE_SKUTE_HELPER', os.path.abspath(os.path.join(os.path.dirname(__file__), 'helper.png')), 'IMAGE')
+    bpy.types.TOPBAR_MT_file_export.append(ExportSkute.handle_menu_export)
+    bpy.types.OUTLINER_HT_header.append(ThereOutlinerPanel.handle_outliner_header)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportSkute)
     bpy.utils.unregister_class(ExportSkutePreferences)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_export_handler)
+    bpy.utils.unregister_class(ThereLODOperator)
+    bpy.utils.unregister_class(ThereShapeKeyOperator)
+    bpy.utils.unregister_class(ThereOutlinerPanel)
+    bpy.utils.previews.remove(ThereOutlinerPanel.previews)
+    bpy.types.TOPBAR_MT_file_export.remove(ExportSkute.handle_menu_export)
+    bpy.types.OUTLINER_HT_header.remove(ThereOutlinerPanel.handle_outliner_header)
