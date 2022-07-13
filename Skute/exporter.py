@@ -501,6 +501,7 @@ class ThereLODOperator(bpy.types.Operator):
         for bpy_lod in bpy_lods:
             name = ThereOutlinerPanel.get_basename(bpy_lod.name).lower()
             bpy_lod.hide_set(name != id)
+        ThereOutlinerPanel.set_active(context, bpy_lods)
         return {'FINISHED'}
 
     @classmethod
@@ -548,6 +549,7 @@ class ThereShapeKeyOperator(bpy.types.Operator):
                     shape_key.mute = True
                 if not shape_key.mute:
                     shape_key.value = 1.0
+        ThereOutlinerPanel.set_active(context, bpy_lods, id)
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -649,6 +651,25 @@ class ThereOutlinerPanel(bpy.types.Panel):
                     continue
                 bpy_lods.append(bpy_lod)
         return bpy_lods
+
+    @staticmethod
+    def set_active(context, bpy_lods, shape_id=None):
+        for bpy_selected in context.selected_objects:
+            bpy_selected.select_set(False)
+        for bpy_lod in bpy_lods:
+            if bpy_lod.hide_get():
+                continue
+            if ThereOutlinerPanel.get_basename(bpy_lod.parent.name).lower() != Accoutrement.HAIR.title.lower():
+                continue
+            context.view_layer.objects.active = bpy_lod
+            if shape_id is not None:
+                for index, shape_key in enumerate(bpy_lod.data.shape_keys.key_blocks):
+                    if shape_key.name.lower() == shape_id:
+                        bpy_lod.active_shape_key_index = index
+                        break
+                else:
+                    bpy_lod.active_shape_key_index = 0
+            break
 
     @staticmethod
     def handle_outliner_header(self, context):
