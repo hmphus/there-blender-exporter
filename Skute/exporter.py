@@ -536,6 +536,7 @@ class ThereShapeKeyOperator(bpy.types.Operator):
                     states[name] = shape_key.mute
                 else:
                     states[name] = states[name] or shape_key.mute
+        unmute_count = len([v for v in states.values() if not v])
         for bpy_lod in bpy_lods:
             for shape_key in bpy_lod.data.shape_keys.key_blocks:
                 name = shape_key.name.lower()
@@ -544,7 +545,10 @@ class ThereShapeKeyOperator(bpy.types.Operator):
                 if id == 'basis':
                     shape_key.mute = True
                 elif name == id:
-                    shape_key.mute = not states[name] if name in states else False
+                    if not self.ctrl and not states.get(name, True) and unmute_count > 1:
+                        shape_key.mute = False
+                    else:
+                        shape_key.mute = not states[name] if name in states else False
                 elif not self.ctrl:
                     shape_key.mute = True
                 if not shape_key.mute:
