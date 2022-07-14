@@ -428,7 +428,7 @@ class ExportSkuteBase:
                     raise RuntimeError('LOD%s is not rigged to the armature bones.' % lod.index)
                 elif count == 1:
                     values.append([values[0][0], 0.0])
-                else:
+                elif count > 2:
                     raise RuntimeError('LOD%s is rigged to more than 2 bones per vertex.' % lod.index)
                 vertex.bone_indices = [v[0] for v in values]
                 vertex.bone_weights = [v[1] / total for v in values]
