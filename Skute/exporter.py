@@ -165,7 +165,7 @@ class ExportSkuteBase:
             if bpy_lod.type != 'MESH':
                 continue
             for bpy_vertex_group in bpy_lod.vertex_groups:
-                if bpy_vertex_group.name not in bone_lookup:
+                if bpy_vertex_group.name not in bone_lookup and not bpy_vertex_group.name.startswith('_'):
                     raise RuntimeError('Vertex group "%s" does not refer to a bone.' % bpy_vertex_group.name)
             lod = there.LOD()
             matrix_skute = matrix_root_inverted @ bpy_lod.matrix_world
@@ -176,7 +176,7 @@ class ExportSkuteBase:
                 indices=[v.vertex_index for v in bpy_lod.data.loops],
                 normals=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_lod.data.loops]],
                 uvs=[[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_lod.data.uv_layers][:1],
-                bones=[bone_lookup[g.name] for g in bpy_lod.vertex_groups],
+                bones=[bone_lookup.get(g.name, -1) for g in bpy_lod.vertex_groups],
                 weights=[{g.group: g.weight for g in v.groups} for v in bpy_lod.data.vertices],
                 shapes=[],
             )
@@ -421,7 +421,7 @@ class ExportSkuteBase:
     def normalize_weights(self):
         for lod in self.skute.lods:
             for vertex in lod.vertices:
-                values = sorted([v for v in zip(vertex.bone_indices, vertex.bone_weights) if v[1] > 0.0], key=lambda v: v[1], reverse=True)
+                values = sorted([v for v in zip(vertex.bone_indices, vertex.bone_weights) if v[0] >= 0 and v[1] > 0.0], key=lambda v: v[1], reverse=True)
                 total = sum([v[1] for v in values] + [0.0])
                 count = len(values)
                 if count == 0 or total < 0.1:
