@@ -224,7 +224,7 @@ class Skute:
     def store_archetypes(self, lod):
         vertex_buffers = [lod.vertices[i:i + 4095] for i in range(0, len(lod.vertices), 4095)]
         assert len(vertex_buffers) == 1, 'The mesh is too complicated to export.'
-        index_width = max(4, int(math.ceil(math.log(len(lod.vertices) - 1, 2))))
+        index_width = max(4, int(math.ceil(math.log(len(lod.vertices), 2))))
         assert index_width < 16, 'The mesh is too complicated to export.'
         self.store_archetype_info(lod, len(vertex_buffers), index_width)
         if len(vertex_buffers) > 0:
