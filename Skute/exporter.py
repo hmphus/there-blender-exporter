@@ -29,9 +29,20 @@ class Gender(enum.Enum):
 class Accoutrement(enum.Enum):
     HAIR = (
         'Hair', (
+            Object(name='hair', title='Hair'),
             Object(name='fc_hairscrunchy', title='HairScrunchy'),
             Object(name='fc_eyebrow', title='Eyebrow'),
-            Object(name='hair', title='Hair'),
+            Object(name='fc_eyeshadow', title='EyeShadow'),
+            Object(name='fc_mascara', title='Mascara'),
+            Object(name='fc_upperlip', title='UpperLip'),
+            Object(name='fc_lowerlip', title='LowerLip'),
+            Object(name='fc_teeth', title='Teeth'),
+            Object(name='fc_tongue', title='Tongue'),
+            Object(name='fc_innermouth', title='InnerMouth'),
+            Object(name='fc_fleshblushing', title='FleshBlushing'),
+            Object(name='fc_fleshshadedblushing', title='FleshShadedBlushing'),
+            Object(name='fc_flesh', title='Flesh'),
+            Object(name='fc_fleshshaded', title='FleshShaded'),
         ), (
             Object(name='hair_round', title='Round'),
             Object(name='hair_square', title='Square'),
