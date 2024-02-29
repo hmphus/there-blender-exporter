@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'There Skute format',
     'author': 'Brian Gontowski',
-    'version': (1, 2, 4),
+    'version': (1, 2, 5),
     'blender': (2, 93, 0),
     'location': 'File > Import-Export',
     'description': 'Export as Skute for There.com',
