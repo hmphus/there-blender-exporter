@@ -1,6 +1,85 @@
 import bpy
 
 
+class ShaderNodeTreeCompat:
+    class Inputs3:
+        def __init__(self, inputs):
+            self.inputs = inputs
+
+        def get(self, name):
+            return self.inputs.get(name)
+
+        def new(self, name, type):
+            return self.inputs.new(name=name, type=type)
+
+    class Outputs3:
+        def __init__(self, outputs):
+            self.outputs = outputs
+
+        def get(self, name):
+            return self.outputs.get(name)
+
+        def new(self, name, type):
+            return self.outputs.new(name=name, type=type)
+
+    class Inputs4:
+        def __init__(self, interface):
+            self.interface = interface
+
+        def get(self, name):
+            for item in self.interface.items_tree:
+                if item.item_type != 'SOCKET':
+                    continue
+                if item.in_out != 'INPUT':
+                    continue
+                if item.name == name:
+                    return item
+            return None
+
+        def new(self, name, type):
+            return self.interface.new_socket(name=name, socket_type=type, in_out='INPUT')
+
+    class Outputs4:
+        def __init__(self, interface):
+            self.interface = interface
+
+        def get(self, name):
+            for item in self.interface.items_tree:
+                if item.item_type != 'SOCKET':
+                    continue
+                if item.in_out != 'OUTPUT':
+                    continue
+                if item.name == name:
+                    return item
+            return None
+
+        def new(self, name, type):
+            return self.interface.new_socket(name=name, socket_type=type, in_out='OUTPUT')
+
+    def __init__(self, node_tree):
+        self.node_tree = node_tree
+
+    @property
+    def inputs(self):
+        if hasattr(self.node_tree, 'inputs'):
+            return ShaderNodeTreeCompat.Inputs3(self.node_tree.inputs)
+        return ShaderNodeTreeCompat.Inputs4(self.node_tree.interface)
+
+    @property
+    def outputs(self):
+        if hasattr(self.node_tree, 'outputs'):
+            return ShaderNodeTreeCompat.Outputs3(self.node_tree.outputs)
+        return ShaderNodeTreeCompat.Outputs4(self.node_tree.interface)
+
+    @property
+    def links(self):
+        return self.node_tree.links
+
+    @property
+    def nodes(self):
+        return self.node_tree.nodes
+
+
 @bpy.app.handlers.persistent
 def there_node_group_handler(dummy):
     node_tree = bpy.data.node_groups.get('There BSDF')
@@ -9,6 +88,7 @@ def there_node_group_handler(dummy):
     else:
         node_tree.links.clear()
         node_tree.nodes.clear()
+    node_tree = ShaderNodeTreeCompat(node_tree)
     socket_color = node_tree.inputs.get('Color')
     if socket_color is None:
         socket_color = node_tree.inputs.new(type='NodeSocketColor', name='Color')
@@ -19,7 +99,7 @@ def there_node_group_handler(dummy):
         socket_emission.default_value = (0.0, 0.0, 0.0, 1.0)
     socket_alpha = node_tree.inputs.get('Alpha')
     if socket_alpha is None:
-        socket_alpha = node_tree.inputs.new(type='NodeSocketFloatFactor', name='Alpha')
+        socket_alpha = node_tree.inputs.new(type='NodeSocketFloat', name='Alpha')
         socket_alpha.min_value = 0.0
         socket_alpha.max_value = 1.0
         socket_alpha.default_value = 1.0
@@ -29,7 +109,7 @@ def there_node_group_handler(dummy):
         socket_detail_color.default_value = (0.0, 0.0, 0.0, 1.0)
     socket_detail_alpha = node_tree.inputs.get('Detail Alpha')
     if socket_detail_alpha is None:
-        socket_detail_alpha = node_tree.inputs.new(type='NodeSocketFloatFactor', name='Detail Alpha')
+        socket_detail_alpha = node_tree.inputs.new(type='NodeSocketFloat', name='Detail Alpha')
         socket_detail_alpha.min_value = 0.0
         socket_detail_alpha.max_value = 1.0
         socket_detail_alpha.default_value = 0.0
@@ -47,7 +127,7 @@ def there_node_group_handler(dummy):
         socket_gloss_color.default_value = (0.0, 0.0, 0.0, 1.0)
     socket_gloss_alpha = node_tree.inputs.get('Gloss Alpha')
     if socket_gloss_alpha is None:
-        socket_gloss_alpha = node_tree.inputs.new(type='NodeSocketFloatFactor', name='Gloss Alpha')
+        socket_gloss_alpha = node_tree.inputs.new(type='NodeSocketFloat', name='Gloss Alpha')
         socket_gloss_alpha.min_value = 0.0
         socket_gloss_alpha.max_value = 1.0
         socket_gloss_alpha.default_value = 0.0
@@ -111,7 +191,10 @@ def there_node_group_handler(dummy):
     node_tree.links.new(node_mix_rgb_color.outputs['Color'], node_principled.inputs['Base Color'])
     node_tree.links.new(node_mix_rgb_emission.outputs['Color'], node_mix_rgb_lighting.inputs['Color1'])
     node_tree.links.new(node_mix_rgb_detail.outputs['Color'], node_diffuse.inputs['Color'])
-    node_tree.links.new(node_mix_rgb_lighting.outputs['Color'], node_principled.inputs['Emission'])
+    if 'Emission' in node_principled.inputs:
+        node_tree.links.new(node_mix_rgb_lighting.outputs['Color'], node_principled.inputs['Emission'])
+    else:
+        node_tree.links.new(node_mix_rgb_lighting.outputs['Color'], node_principled.inputs['Emission Color'])
     node_tree.links.new(node_normal.outputs['Normal'], node_principled.inputs['Normal'])
     node_tree.links.new(node_normal.outputs['Normal'], node_diffuse.inputs['Normal'])
     node_tree.links.new(node_principled.outputs['BSDF'], node_mix_shader.inputs[1])
