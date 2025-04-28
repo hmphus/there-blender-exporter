@@ -135,7 +135,8 @@ class ExportModelBase:
                 if len(bpy_node.material_slots) == 0:
                     self.report({'WARNING'}, 'Object "%s" is missing a material and will not be exported.' % bpy_node.name)
                 else:
-                    bpy_node.data.calc_normals_split()
+                    if bpy.app.version < (4, 1, 0):
+                        bpy_node.data.calc_normals_split()
                     bpy_node.data.calc_tangents()
                     components = Object(
                         positions=[[-v[0], v[2], v[1]] for v in [matrix_model @ v.co for v in bpy_node.data.vertices]],
@@ -143,9 +144,17 @@ class ExportModelBase:
                         normals=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.normal).normalized() for v in bpy_node.data.loops]],
                         tangents=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.tangent).normalized() for v in bpy_node.data.loops]],
                         bitangents=[[-v[0], v[2], v[1]] for v in [(matrix_rotation @ v.bitangent).normalized() for v in bpy_node.data.loops]],
-                        colors=[[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1],
                         uvs=[[[d.uv[0], 1.0 - d.uv[1]] for d in e.data] for e in bpy_node.data.uv_layers][:2],
+                        colors=[],
                     )
+                    if bpy.app.version < (3, 2, 0):
+                        components.colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
+                    else:
+                        for color_attrs in bpy_node.data.color_attributes[:1]:
+                            if color_attrs.domain == 'POINT':
+                                components.colors.append([self.color_as_uint(color_attrs.data[i].color) for i in components.indices])
+                            elif color_attrs.domain == 'CORNER':
+                                components.colors.append([self.color_as_uint(d.color) for d in color_attrs.data])
                     if len(components.colors) == 1:
                         for color in components.colors[0]:
                             if color != 0xFFFFFFFF:
@@ -153,7 +162,8 @@ class ExportModelBase:
                         else:
                             del components.colors[0]
                     bpy_node.data.free_tangents()
-                    bpy_node.data.free_normals_split()
+                    if bpy.app.version < (4, 1, 0):
+                        bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
                     if name not in self.model.materials:
                         self.model.materials[name] = there.Material(name=name)

@@ -181,7 +181,8 @@ class ExportSkuteBase:
             lod = there.LOD()
             matrix_skute = matrix_root_inverted @ bpy_lod.matrix_world
             matrix_rotation = matrix_skute.to_quaternion().to_matrix()
-            bpy_lod.data.calc_normals_split()
+            if bpy.app.version < (4, 1, 0):
+                bpy_lod.data.calc_normals_split()
             components = Object(
                 positions=[[-v[0], v[2], v[1]] for v in [matrix_skute @ v.co for v in bpy_lod.data.vertices]],
                 indices=[v.vertex_index for v in bpy_lod.data.loops],
@@ -210,7 +211,8 @@ class ExportSkuteBase:
                     )
                     components.shapes.append(shape)
                     optimized.shapes.append(there.Target(name=name))
-            bpy_lod.data.free_normals_split()
+            if bpy.app.version < (4, 1, 0):
+                bpy_lod.data.free_normals_split()
             for index, name in enumerate(bpy_lod.material_slots.keys()):
                 if name not in self.skute.materials:
                     self.skute.materials[name] = there.Material(name=name)
@@ -333,7 +335,8 @@ class ExportSkuteBase:
             material.index = index
             if not bpy_material.use_backface_culling:
                 raise RuntimeError('Material "%s" does not support two sided rendering.' % bpy_material.name)
-            if bpy_material.blend_method != 'OPAQUE':
+            print(bpy_material.blend_method)
+            if bpy_material.blend_method in ['BLEND', 'CLIP']:
                 raise RuntimeError('Material "%s" does not support alpha.' % bpy_material.name)
             if material.name.startswith('fc_'):
                 continue
