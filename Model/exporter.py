@@ -335,10 +335,17 @@ class ExportModelBase:
                 raise RuntimeError('Material "%s" is set to Alpha Clip but is missing an Alpha image.' % material.name)
         elif bpy_material.blend_method == 'BLEND':
             if alpha_texture is not None:
-                if alpha_texture == color_texture:
-                    material.draw_mode = there.Material.DrawMode.BLENDED
-                else:
-                    material.textures[there.Material.Slot.OPACITY] = alpha_texture
+                alpha_ext = os.path.splitext(alpha_texture)[1].lower()
+                if bpy.app.version < (4, 2, 0) or alpha_ext == '.jpg':
+                    if alpha_texture == color_texture:
+                        material.draw_mode = there.Material.DrawMode.BLENDED
+                    else:
+                        material.textures[there.Material.Slot.OPACITY] = alpha_texture
+                elif alpha_ext == '.png':
+                    if alpha_texture == color_texture:
+                        material.draw_mode = there.Material.DrawMode.CHROMAKEY
+                    else:
+                        material.textures[there.Material.Slot.CUTOUT] = alpha_texture
             else:
                 raise RuntimeError('Material "%s" is set to Alpha Blend but is missing an Alpha image.' % material.name)
         if detail_color_texture is not None:
@@ -390,10 +397,17 @@ class ExportModelBase:
                 raise RuntimeError('Material "%s" is set to Alpha Clip but is missing an Alpha image.' % material.name)
         elif bpy_material.blend_method == 'BLEND':
             if alpha_texture is not None:
-                if alpha_texture == color_texture:
-                    material.draw_mode = there.Material.DrawMode.BLENDED
-                else:
-                    material.textures[there.Material.Slot.OPACITY] = alpha_texture
+                alpha_ext = os.path.splitext(alpha_texture)[1].lower()
+                if bpy.app.version < (4, 2, 0) or alpha_ext == '.jpg':
+                    if alpha_texture == color_texture:
+                        material.draw_mode = there.Material.DrawMode.BLENDED
+                    else:
+                        material.textures[there.Material.Slot.OPACITY] = alpha_texture
+                elif alpha_ext == '.png':
+                    if alpha_texture == color_texture:
+                        material.draw_mode = there.Material.DrawMode.CHROMAKEY
+                    else:
+                        material.textures[there.Material.Slot.CUTOUT] = alpha_texture
             else:
                 raise RuntimeError('Material "%s" is set to Alpha Blend but is missing an Alpha image.' % material.name)
         if normal_texture is not None:
