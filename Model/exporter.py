@@ -605,6 +605,94 @@ class ExportModelBase:
                 for vertex in mesh.vertices:
                     vertex.position = [v / scale[1] for v in vertex.position]
 
+    def get_stats(self):
+        try:
+            if bpy.context.mode != 'OBJECT':
+                return None
+            try:
+                bpy_scene = bpy.data.scenes[bpy.context.scene.name]
+                bpy_node = [o for o in bpy_scene.objects if o.parent is None and o.type == 'EMPTY'][0]
+            except IndexError:
+                return None
+            stats = Object(
+                collision=None,
+                lods=[],
+            )
+            for bpy_object in bpy_node.children:
+                if bpy_object.type not in ['EMPTY', 'MESH']:
+                    continue
+                if bpy_object.name.lower() == 'col':
+                    positions, polygons = self.optimize_collision(bpy_object)
+                    stats.collision = Object(
+                        vertex_count=len(positions),
+                        polygon_count=len(polygons),
+                    )
+                else:
+                    stats_lod = Object(
+                        name=bpy_object.name,
+                        vertex_count=0,
+                        triangle_count=0,
+                    )
+                    self.get_node_stats(stats_lod, bpy_object)
+                    stats.lods.append(stats_lod)
+        except (RuntimeError, AssertionError) as error:
+            return None
+        return stats
+
+    def get_node_stats(self, stats, bpy_node):
+        if bpy_node.type == 'MESH':
+            if bpy.app.version < (4, 1, 0):
+                bpy_node.data.calc_normals_split()
+            bpy_node.data.calc_tangents()
+            positions = [list(v) for v in [v.co for v in bpy_node.data.vertices]]
+            indices = [v.vertex_index for v in bpy_node.data.loops]
+            normals = [list(v) for v in [v.normal for v in bpy_node.data.loops]]
+            tangents = [list(v) for v in [v.tangent for v in bpy_node.data.loops]]
+            bitangents = [list(v) for v in [v.bitangent for v in bpy_node.data.loops]]
+            uvs = [[list(d.uv) for d in e.data] for e in bpy_node.data.uv_layers][:2]
+            colors = []
+            if bpy.app.version < (3, 2, 0):
+                colors = [[self.color_as_uint(d.color) for d in e.data] for e in bpy_node.data.vertex_colors][:1]
+            else:
+                for color_attrs in bpy_node.data.color_attributes[:1]:
+                    if color_attrs.domain == 'POINT':
+                        components.colors.append([self.color_as_uint(color_attrs.data[i].color) for i in components.indices])
+                    elif color_attrs.domain == 'CORNER':
+                        colors.append([self.color_as_uint(d.color) for d in color_attrs.data])
+            if len(colors) == 1:
+                for color in colors[0]:
+                    if color != 0xFFFFFFFF:
+                        break
+                else:
+                    del colors[0]
+            bpy_node.data.free_tangents()
+            if bpy.app.version < (4, 1, 0):
+                bpy_node.data.free_normals_split()
+            if len(positions) > 0 and len(indices) > 0 and len(uvs) > 0:
+                for index, name in enumerate(bpy_node.material_slots.keys()):
+                    bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
+                    if len(bpy_polygons) == 0:
+                        continue
+                    optimized_keys = set()
+                    for bpy_polygon in bpy_polygons:
+                        for index in range(2, len(bpy_polygon.loop_indices)):
+                            triangle = [bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[index - 1], bpy_polygon.loop_indices[index]]
+                            stats.triangle_count += 1
+                            for index in triangle:
+                                key = '%s:%s:%s:%s' % (
+                                    indices[index],
+                                    '%.03f:%.03f:%.03f' % (normals[index][0], normals[index][1], normals[index][2]),
+                                    ':'.join(['%x' % c[index] for c in colors]),
+                                    ':'.join(['%.03f:%.03f' % (u[index][0], u[index][1]) for u in uvs]),
+                                )
+                                if key not in optimized_keys:
+                                    optimized_keys.add(key)
+                                    stats.vertex_count += 1
+        for bpy_object in bpy_node.children:
+            if bpy_object.type not in ['EMPTY', 'MESH']:
+                continue
+            self.get_node_stats(stats, bpy_object)
+
     @staticmethod
     def get_basename(name):
         return re.sub(r'\.\d+$', '', name)

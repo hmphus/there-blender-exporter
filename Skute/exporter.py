@@ -335,7 +335,6 @@ class ExportSkuteBase:
             material.index = index
             if not bpy_material.use_backface_culling:
                 raise RuntimeError('Material "%s" does not support two sided rendering.' % bpy_material.name)
-            print(bpy_material.blend_method)
             if bpy_material.blend_method in ['BLEND', 'CLIP']:
                 raise RuntimeError('Material "%s" does not support alpha.' % bpy_material.name)
             if material.name.startswith('fc_'):
@@ -464,6 +463,87 @@ class ExportSkuteBase:
             for phenomorph in lod.phenomorphs:
                 for delta in phenomorph.deltas:
                     delta.position = [v / scale[1] for v in delta.position]
+
+    def get_stats(self):
+        try:
+            if bpy.context.mode != 'OBJECT':
+                return None
+            try:
+                bpy_scene = bpy.data.scenes[bpy.context.scene.name]
+                bpy_armature = [o for o in bpy_scene.objects if o.parent is None and o.type == 'ARMATURE'][0]
+            except IndexError:
+                return None
+            for gender in Gender:
+                if gender.title.lower() == self.get_basename(bpy_armature.name).lower() and gender.length == round(bpy_armature.data.bones['Head'].length, 5):
+                    break
+            else:
+                return None
+            stats = Object(
+                accoutrements=[],
+            )
+            bone_lookup = {bpy_armature.data.bones[i].name: i + 1 for i in range(len(bpy_armature.data.bones))}
+            for bpy_object in bpy_armature.children:
+                if bpy_object.type != 'EMPTY':
+                    continue
+                accoutrement = getattr(Accoutrement, self.get_basename(bpy_object.name).upper(), None)
+                if accoutrement is None or not accoutrement.is_valid:
+                    continue
+                stats_accoutrement = Object(
+                    name=accoutrement.title,
+                    lods=[],
+                )
+                for bpy_lod in bpy_object.children:
+                    if bpy_lod.type != 'MESH':
+                        continue
+                    stats_lod = Object(
+                        name=bpy_lod.name,
+                        vertex_count=0,
+                        triangle_count=0,
+                        shape_count=0,
+                    )
+                    if bpy.app.version < (4, 1, 0):
+                        bpy_lod.data.calc_normals_split()
+                    positions = [list(v) for v in [v.co for v in bpy_lod.data.vertices]]
+                    indices = [v.vertex_index for v in bpy_lod.data.loops]
+                    normals = [list(v) for v in [v.normal for v in bpy_lod.data.loops]]
+                    uvs = [[list(d.uv) for d in e.data] for e in bpy_lod.data.uv_layers][:1]
+                    bones = [bone_lookup.get(g.name, -1) for g in bpy_lod.vertex_groups]
+                    weights = [{g.group: g.weight for g in v.groups} for v in bpy_lod.data.vertices]
+                    if len(uvs) == 0:
+                        uvs = [(0.0, 0.0)] * len(normals)
+                    else:
+                        uvs = uvs[0]
+                    if bpy.app.version < (4, 1, 0):
+                        bpy_lod.data.free_normals_split()
+                    if bpy_lod.data.shape_keys is not None:
+                        for bpy_shape in bpy_lod.data.shape_keys.key_blocks[1:]:
+                            name = accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name))
+                            if name is None:
+                                continue
+                            stats_lod.shape_count += 1
+                    for index, name in enumerate(bpy_lod.material_slots.keys()):
+                        bpy_polygons = [p for p in bpy_lod.data.polygons if p.material_index == index]
+                        if len(bpy_polygons) == 0:
+                            continue
+                        optimized_keys = set()
+                        for bpy_polygon in bpy_polygons:
+                            for index in range(2, len(bpy_polygon.loop_indices)):
+                                triangle = [bpy_polygon.loop_indices[0], bpy_polygon.loop_indices[index - 1], bpy_polygon.loop_indices[index]]
+                                stats_lod.triangle_count += 1
+                                for index in triangle:
+                                    key = '%s:%s:%s' % (
+                                        indices[index],
+                                        '%.03f:%.03f:%.03f' % (normals[index][0], normals[index][1], normals[index][2]),
+                                        '%.03f:%.03f' % (uvs[index][0], uvs[index][1]),
+                                    )
+                                    if key not in optimized_keys:
+                                        optimized_keys.add(key)
+                                        stats_lod.vertex_count += 1
+                    stats_accoutrement.lods.append(stats_lod)
+                stats.accoutrements.append(stats_accoutrement)
+        except (RuntimeError, AssertionError) as error:
+            return None
+        return stats
 
     @staticmethod
     def get_basename(name):
