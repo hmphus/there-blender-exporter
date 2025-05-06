@@ -788,7 +788,7 @@ class SkuteStatistics:
     def draw(cls):
         if cls.rows is None:
             return
-        blf.size(0, 10.0)
+        blf.size(0, 11.0)
         blf.color(0, 1.0, 1.0, 1.0, 1.0)
         blf.shadow(0, 6, 0.0, 0.0, 0.0, 1.0)
         blf.enable(0, blf.SHADOW)
@@ -818,8 +818,8 @@ class SkuteStatistics:
                 for lod in accoutrement.lods:
                     cls.rows.append([[10, lod.name]])
                     cls.rows.append([[20, 'Vertices'], [80, '{:n}'.format(lod.vertex_count)]])
-                    cls.rows.append([[20, 'Polygons'], [80, '{:n}'.format(lod.triangle_count)]])
-                    if lod.shape_count > 0:
+                    cls.rows.append([[20, 'Triangles'], [80, '{:n}'.format(lod.triangle_count)]])
+                    if lod.shape_count > 0 and False:
                         cls.rows.append([[20, 'Shapes'], [80, '{:n}'.format(lod.shape_count)]])
         else:
             cls.rows = None
