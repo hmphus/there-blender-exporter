@@ -665,7 +665,7 @@ class ExportModelBase:
             else:
                 for color_attrs in bpy_node.data.color_attributes[:1]:
                     if color_attrs.domain == 'POINT':
-                        components.colors.append([self.color_as_uint(color_attrs.data[i].color) for i in components.indices])
+                        colors.append([self.color_as_uint(color_attrs.data[i].color) for i in indices])
                     elif color_attrs.domain == 'CORNER':
                         colors.append([self.color_as_uint(d.color) for d in color_attrs.data])
             if len(colors) == 1:
