@@ -788,24 +788,31 @@ class SkuteStatistics:
     def draw(cls):
         if cls.rows is None:
             return
-        blf.size(0, 11.0)
+        if bpy.app.version < (4, 0, 0):
+            blf.size(0, 11.0, 72)
+        else:
+            blf.size(0, 11.0)
         blf.color(0, 1.0, 1.0, 1.0, 1.0)
-        blf.shadow(0, 6, 0.0, 0.0, 0.0, 1.0)
-        blf.enable(0, blf.SHADOW)
+        if bpy.app.version >= (4, 2, 0):
+            blf.shadow(0, 6, 0.0, 0.0, 0.0, 1.0)
+            blf.enable(0, blf.SHADOW)
         for y, row in enumerate(reversed(cls.rows)):
             for column in row:
                 blf.position(0, 10.0 + column[0], 17.0 + y * 17.0, 0.0)
                 blf.draw(0, column[1])
-        blf.disable(0, blf.SHADOW)
+        if bpy.app.version >= (4, 2, 0):
+            blf.disable(0, blf.SHADOW)
 
-    @classmethod
+    @staticmethod
     @bpy.app.handlers.persistent
-    def init(cls, *args, **kwargs):
+    def init(*args, **kwargs):
+        cls = SkuteStatistics
         cls.rows = None
 
-    @classmethod
+    @staticmethod
     @bpy.app.handlers.persistent
-    def update(cls, *args, **kwargs):
+    def update(*args, **kwargs):
+        cls = SkuteStatistics
         if not bpy.context.window_manager.show_there_skute_stats:
             cls.rows = None
             return
