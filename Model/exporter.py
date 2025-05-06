@@ -639,6 +639,7 @@ class ExportModelBase:
                         name=bpy_object.name,
                         vertex_count=0,
                         triangle_count=0,
+                        node_count=0,
                     )
                     self.get_node_stats(stats_lod, bpy_object)
                     stats.lods.append(stats_lod)
@@ -647,6 +648,7 @@ class ExportModelBase:
         return stats
 
     def get_node_stats(self, stats, bpy_node):
+        stats.node_count += 1
         if bpy_node.type == 'MESH':
             if bpy.app.version < (4, 1, 0):
                 bpy_node.data.calc_normals_split()
@@ -783,6 +785,8 @@ class ModelStatistics:
                 cls.rows.append([[10, lod.name]])
                 cls.rows.append([[20, 'Vertices'], [80, '{:n}'.format(lod.vertex_count)]])
                 cls.rows.append([[20, 'Triangles'], [80, '{:n}'.format(lod.triangle_count)]])
+                if lod.node_count > 0:
+                    cls.rows.append([[20, 'Nodes'], [80, '{:n}'.format(lod.node_count)]])
         else:
             cls.rows = None
 
