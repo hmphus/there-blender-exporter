@@ -1,8 +1,10 @@
 import os
 import re
 import bpy
+import blf
 import enum
 import math
+import locale
 import operator
 import mathutils
 import bpy.utils.previews
@@ -464,10 +466,8 @@ class ExportSkuteBase:
                 for delta in phenomorph.deltas:
                     delta.position = [v / scale[1] for v in delta.position]
 
-    def get_stats(self):
+    def get_stats(self, is_quick=False):
         try:
-            if bpy.context.mode != 'OBJECT':
-                return None
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_armature = [o for o in bpy_scene.objects if o.parent is None and o.type == 'ARMATURE'][0]
@@ -481,6 +481,10 @@ class ExportSkuteBase:
             stats = Object(
                 accoutrements=[],
             )
+            if is_quick:
+                return stats
+            if bpy.context.mode != 'OBJECT':
+                return None
             bone_lookup = {bpy_armature.data.bones[i].name: i + 1 for i in range(len(bpy_armature.data.bones))}
             for bpy_object in bpy_armature.children:
                 if bpy_object.type != 'EMPTY':
@@ -776,6 +780,67 @@ class ThereOutlinerPanel(bpy.types.Panel):
             layout.popover(ThereOutlinerPanel.bl_idname, text='', icon_value=ThereOutlinerPanel.previews['THERE_SKUTE_HELPER'].icon_id)
 
 
+class SkuteStatistics:
+    handler = None
+    rows = None
+
+    @classmethod
+    def draw(cls):
+        if cls.rows is None:
+            return
+        blf.size(0, 10.0)
+        blf.color(0, 1.0, 1.0, 1.0, 1.0)
+        blf.shadow(0, 6, 0.0, 0.0, 0.0, 1.0)
+        blf.enable(0, blf.SHADOW)
+        for y, row in enumerate(reversed(cls.rows)):
+            for column in row:
+                blf.position(0, 10.0 + column[0], 17.0 + y * 17.0, 0.0)
+                blf.draw(0, column[1])
+        blf.disable(0, blf.SHADOW)
+
+    @classmethod
+    @bpy.app.handlers.persistent
+    def init(cls, *args, **kwargs):
+        cls.rows = None
+
+    @classmethod
+    @bpy.app.handlers.persistent
+    def update(cls, *args, **kwargs):
+        if not bpy.context.window_manager.show_there_skute_stats:
+            cls.rows = None
+            return
+        stats = ExportSkuteBase().get_stats()
+        if stats is not None:
+            locale.setlocale(locale.LC_ALL, '')
+            cls.rows = []
+            for accoutrement in stats.accoutrements:
+                cls.rows.append([[0, accoutrement.name]])
+                for lod in accoutrement.lods:
+                    cls.rows.append([[10, lod.name]])
+                    cls.rows.append([[20, 'Vertices'], [80, '{:n}'.format(lod.vertex_count)]])
+                    cls.rows.append([[20, 'Polygons'], [80, '{:n}'.format(lod.triangle_count)]])
+                    if lod.shape_count > 0:
+                        cls.rows.append([[20, 'Shapes'], [80, '{:n}'.format(lod.shape_count)]])
+        else:
+            cls.rows = None
+
+    @classmethod
+    def poll(cls, context):
+        stats = ExportSkuteBase().get_stats(is_quick=True)
+        if stats is None:
+            return False
+        return True
+
+    @staticmethod
+    def overlay_options(self, context):
+        cls = SkuteStatistics
+        if not cls.poll(context):
+            return
+        layout = self.layout
+        layout.label(text='There Skute')
+        layout.prop(context.window_manager, 'show_there_skute_stats')
+
+
 def register_exporter():
     bpy.utils.register_class(ExportSkute)
     bpy.utils.register_class(ExportSkutePreferences)
@@ -786,6 +851,12 @@ def register_exporter():
     ThereOutlinerPanel.previews.load('THERE_SKUTE_HELPER', os.path.abspath(os.path.join(os.path.dirname(__file__), 'helper.png')), 'IMAGE')
     bpy.types.TOPBAR_MT_file_export.append(ExportSkute.handle_menu_export)
     bpy.types.OUTLINER_HT_header.append(ThereOutlinerPanel.handle_outliner_header)
+    bpy.app.handlers.load_pre.append(SkuteStatistics.init)
+    bpy.app.handlers.load_post.append(SkuteStatistics.update)
+    bpy.app.handlers.depsgraph_update_post.append(SkuteStatistics.update)
+    SkuteStatistics.handler = bpy.types.SpaceView3D.draw_handler_add(SkuteStatistics.draw, tuple(), 'WINDOW', 'POST_PIXEL')
+    bpy.types.VIEW3D_PT_overlay.append(SkuteStatistics.overlay_options)
+    bpy.types.WindowManager.show_there_skute_stats = bpy.props.BoolProperty(name='Statistics', default=True)
 
 
 def unregister_exporter():
@@ -797,3 +868,9 @@ def unregister_exporter():
     bpy.utils.previews.remove(ThereOutlinerPanel.previews)
     bpy.types.TOPBAR_MT_file_export.remove(ExportSkute.handle_menu_export)
     bpy.types.OUTLINER_HT_header.remove(ThereOutlinerPanel.handle_outliner_header)
+    bpy.app.handlers.load_pre.remove(SkuteStatistics.init)
+    bpy.app.handlers.load_post.remove(SkuteStatistics.update)
+    bpy.app.handlers.depsgraph_update_post.remove(SkuteStatistics.update)
+    bpy.types.SpaceView3D.draw_handler_remove(SkuteStatistics.handler, 'WINDOW')
+    bpy.types.VIEW3D_PT_overlay.remove(SkuteStatistics.overlay_options)
+    del bpy.types.WindowManager.show_there_skute_stats

@@ -1,8 +1,10 @@
 import os
 import re
 import bpy
+import blf
 import math
 import bmesh
+import locale
 import operator
 from bpy_extras.io_utils import ExportHelper
 from . import there
@@ -605,19 +607,24 @@ class ExportModelBase:
                 for vertex in mesh.vertices:
                     vertex.position = [v / scale[1] for v in vertex.position]
 
-    def get_stats(self):
+    def get_stats(self, is_quick=False):
         try:
-            if bpy.context.mode != 'OBJECT':
-                return None
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_node = [o for o in bpy_scene.objects if o.parent is None and o.type == 'EMPTY'][0]
             except IndexError:
                 return None
+            props = {k.lower(): v for k, v in bpy_node.items() if type(v) in [str, int, float]}
+            if 'lod0' not in props:
+                return None
             stats = Object(
                 collision=None,
                 lods=[],
             )
+            if is_quick:
+                return stats
+            if bpy.context.mode != 'OBJECT':
+                return None
             for bpy_object in bpy_node.children:
                 if bpy_object.type not in ['EMPTY', 'MESH']:
                     continue
@@ -734,13 +741,87 @@ class ExportModelPreferences(bpy.types.AddonPreferences):
         layout.prop(self, 'save_preview')
 
 
+class ModelStatistics:
+    handler = None
+    rows = None
+
+    @classmethod
+    def draw(cls):
+        if cls.rows is None:
+            return
+        blf.size(0, 10.0)
+        blf.color(0, 1.0, 1.0, 1.0, 1.0)
+        blf.shadow(0, 6, 0.0, 0.0, 0.0, 1.0)
+        blf.enable(0, blf.SHADOW)
+        for y, row in enumerate(reversed(cls.rows)):
+            for column in row:
+                blf.position(0, 10.0 + column[0], 17.0 + y * 17.0, 0.0)
+                blf.draw(0, column[1])
+        blf.disable(0, blf.SHADOW)
+
+    @classmethod
+    @bpy.app.handlers.persistent
+    def init(cls, *args, **kwargs):
+        cls.rows = None
+
+    @classmethod
+    @bpy.app.handlers.persistent
+    def update(cls, *args, **kwargs):
+        if not bpy.context.window_manager.show_there_model_stats:
+            cls.rows = None
+            return
+        stats = ExportModelBase().get_stats()
+        if stats is not None:
+            locale.setlocale(locale.LC_ALL, '')
+            cls.rows = []
+            collision = stats.collision
+            if collision is not None:
+                cls.rows.append([[10, 'Collision']])
+                cls.rows.append([[20, 'Vertices'], [80, '{:n}'.format(collision.vertex_count)]])
+                cls.rows.append([[20, 'Polygons'], [80, '{:n}'.format(collision.polygon_count)]])
+            for lod in stats.lods:
+                cls.rows.append([[10, lod.name]])
+                cls.rows.append([[20, 'Vertices'], [80, '{:n}'.format(lod.vertex_count)]])
+                cls.rows.append([[20, 'Polygons'], [80, '{:n}'.format(lod.triangle_count)]])
+        else:
+            cls.rows = None
+
+    @classmethod
+    def poll(cls, context):
+        stats = ExportModelBase().get_stats(is_quick=True)
+        if stats is None:
+            return False
+        return True
+
+    @staticmethod
+    def overlay_options(self, context):
+        cls = ModelStatistics
+        if not cls.poll(context):
+            return
+        layout = self.layout
+        layout.label(text='There Model')
+        layout.prop(context.window_manager, 'show_there_model_stats')
+
+
 def register_exporter():
     bpy.utils.register_class(ExportModel)
     bpy.utils.register_class(ExportModelPreferences)
     bpy.types.TOPBAR_MT_file_export.append(ExportModel.handle_menu_export)
+    bpy.app.handlers.load_pre.append(ModelStatistics.init)
+    bpy.app.handlers.load_post.append(ModelStatistics.update)
+    bpy.app.handlers.depsgraph_update_post.append(ModelStatistics.update)
+    ModelStatistics.handler = bpy.types.SpaceView3D.draw_handler_add(ModelStatistics.draw, tuple(), 'WINDOW', 'POST_PIXEL')
+    bpy.types.VIEW3D_PT_overlay.append(ModelStatistics.overlay_options)
+    bpy.types.WindowManager.show_there_model_stats = bpy.props.BoolProperty(name='Statistics', default=True)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportModel)
     bpy.utils.unregister_class(ExportModelPreferences)
     bpy.types.TOPBAR_MT_file_export.remove(ExportModel.handle_menu_export)
+    bpy.app.handlers.load_pre.remove(ModelStatistics.init)
+    bpy.app.handlers.load_post.remove(ModelStatistics.update)
+    bpy.app.handlers.depsgraph_update_post.remove(ModelStatistics.update)
+    bpy.types.SpaceView3D.draw_handler_remove(ModelStatistics.handler, 'WINDOW')
+    bpy.types.VIEW3D_PT_overlay.remove(ModelStatistics.overlay_options)
+    del bpy.types.WindowManager.show_there_model_stats
