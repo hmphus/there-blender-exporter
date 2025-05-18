@@ -19,19 +19,126 @@ class Object:
 
 
 class Gender(enum.Enum):
-    FEMALE = ('Female', 0.24694)
-    MALE = ('Male', 0.24601)
+    FEMALE = (0, 'Female', 0.24694)
+    MALE = (1, 'Male', 0.24601)
 
-    def __init__(self, title, length):
+    def __init__(self, index, title, length):
+        self.index = index
         self.title = title
         self.skeleton = title[0].lower() + 't0'
         self.length = length
 
 
+class Bone(enum.Enum):
+    PELVIS = (1, 'Pelvis')
+    LEFT_HIP = (2, 'LeftHip')
+    LEFT_KNEE = (3, 'LeftKnee')
+    LEFT_ANKLE = (4, 'LeftAnkle')
+    LEFT_TOE_BASE = (5, 'LeftToeBase')
+    RIGHT_HIP = (6, 'RightHip')
+    RIGHT_KNEE = (7, 'RightKnee')
+    RIGHT_ANKLE = (8, 'RightAnkle')
+    RIGHT_TOE_BASE = (9, 'RightToeBase')
+    SPINE_1 = (10, 'Spine1')
+    SPINE_2 = (11, 'Spine2')
+    SPINE_3 = (12, 'Spine3')
+    BREASTS = (13, 'Breasts')
+    SPINE_4 = (14, 'Spine4')
+    LEFT_CLAVICLE = (15, 'LeftClavicle')
+    LEFT_SHOULDER = (16, 'LeftShoulder')
+    LEFT_ELBOW = (17, 'LeftElbow')
+    LEFT_WRIST = (18, 'LeftWrist')
+    LEFT_FINGERS_1 = (19, 'LeftFingers1')
+    LEFT_FINGERS_2 = (20, 'LeftFingers2')
+    LEFT_THUMB_1 = (21, 'LeftThumb1')
+    LEFT_THUMB_2 = (22, 'LeftThumb2')
+    NECK = (23, 'Neck')
+    HEAD = (24, 'Head')
+    RIGHT_CLAVICLE = (25, 'RightClavicle')
+    RIGHT_SHOULDER = (26, 'RightShoulder')
+    RIGHT_ELBOW = (27, 'RightElbow')
+    RIGHT_WRIST = (28, 'RightWrist')
+    RIGHT_FINGERS_1 = (29, 'RightFingers1')
+    RIGHT_FINGERS_2 = (30, 'RightFingers2')
+    RIGHT_THUMB_1 = (31, 'RightThumb1')
+    RIGHT_THUMB_2 = (32, 'RightThumb2')
+
+    def __init__(self, index, title):
+        self.index = index
+        self.title = title
+
+
+# The below specs must match what the submission system is expecting
+# They are designed to avoid exceeding the avatar memory usage and crashing the client
 class Accoutrement(enum.Enum):
     HAIR = (
         'Hair', (
             Object(name='hair', title='Hair'),
+        ), (
+            Object(name='hair_round', title='Round'),
+            Object(name='hair_square', title='Square'),
+            Object(name='hair_tall', title='Tall'),
+            Object(name='hair_wedge', title='Wedge'),
+            Object(name='hair_pyramid', title='Pyramid'),
+            Object(name='hair_eyesapart', title='EyesApart'),
+        ), Object(
+            lod_counts=(3, 3),
+            distances=(15, 100, 1000),
+            vertex_counts=(600, 450, 250),
+            face_counts=(1100, 800, 450),
+            bounds=(
+                ((-0.35, 0.25, -0.35), (0.35, 1.2, 0.35)),
+                ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
+            ),
+            bone=None,
+        ), True,
+    )
+    EARRINGS = (
+        'Earrings', (
+            Object(name='earrings', title='Earrings'),
+        ), (
+            Object(name='round', title='Round'),
+            Object(name='square', title='Square'),
+            Object(name='tall', title='Tall'),
+            Object(name='wedge', title='Wedge'),
+            Object(name='pyramid', title='Pyramid'),
+        ), Object(
+            lod_counts=(2, 3),
+            distances=(15, 100, 1000),
+            vertex_counts=(450, 250, 200),
+            face_counts=(800, 500, 300),
+            bounds=(
+                ((-0.35, 0.25, -0.35), (0.35, 1.2, 0.35)),
+                ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
+            ),
+            bone=Bone.HEAD,
+        ), False,
+    )
+    GLASSES = (
+        'Glasses', (
+            Object(name='glasses', title='Glasses'),
+        ), (
+            Object(name='round', title='Round'),
+            Object(name='square', title='Square'),
+            Object(name='tall', title='Tall'),
+            Object(name='wedge', title='Wedge'),
+            Object(name='pyramid', title='Pyramid'),
+        ), Object(
+            lod_counts=(2, 3),
+            distances=(15, 100, 1000),
+            vertex_counts=(450, 250, 200),
+            face_counts=(800, 500, 300),
+            bounds=(
+                ((-0.35, 0.25, -0.35), (0.35, 1.2, 0.35)),
+                ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
+            ),
+            bone=Bone.HEAD,
+        ), False,
+    )
+    HEAD = ('Head', (), (), None, False)
+    UPPERBODY = ('UpperBody', (), (), None, False)
+    COMMON = (
+        None, (
             Object(name='fc_hairscrunchy', title='HairScrunchy'),
             Object(name='fc_eyebrow', title='Eyebrow'),
             Object(name='fc_eyeshadow', title='EyeShadow'),
@@ -46,41 +153,78 @@ class Accoutrement(enum.Enum):
             Object(name='fc_flesh', title='Flesh'),
             Object(name='fc_fleshshaded', title='FleshShaded'),
         ), (
-            Object(name='hair_round', title='Round'),
-            Object(name='hair_square', title='Square'),
-            Object(name='hair_tall', title='Tall'),
-            Object(name='hair_wedge', title='Wedge'),
-            Object(name='hair_pyramid', title='Pyramid'),
-            Object(name='hair_eyesapart', title='EyesApart'),
-        ), True
+            Object(name='round', title='Round'),
+            Object(name='square', title='Square'),
+            Object(name='tall', title='Tall'),
+            Object(name='wedge', title='Wedge'),
+            Object(name='pyramid', title='Pyramid'),
+            Object(name='cheeks', title='Cheeks'),
+            Object(name='chindown', title='ChinLower'),
+            Object(name='chinforward', title='ChinForward'),
+            Object(name='chinthinner', title='ChinThinner'),
+            Object(name='chinwide', title='ChinWider'),
+            Object(name='earswider', title='EarsWider'),
+            Object(name='eyebrowscloser', title='EyebrowsCloser'),
+            Object(name='eyebrowthicker', title='EyebrowThicker'),
+            Object(name='eyebrowthinner', title='EyebrowThinner'),
+            Object(name='eyesapart', title='EyesApart'),
+            Object(name='eyesbigger', title='EyesBigger'),
+            Object(name='eyescloser', title='EyesCloser'),
+            Object(name='eyessmaller', title='EyesSmaller'),
+            Object(name='eyetilt', title='EyeTilt'),
+            Object(name='jawsquare', title='JawSquare'),
+            Object(name='lipsthicker', title='LipsThicker'),
+            Object(name='lipsthinner', title='LipsThinner'),
+            Object(name='mouthsmaller', title='MouthSmaller'),
+            Object(name='muzzle', title='Muzzle'),
+            Object(name='nosebridgelarger', title='NoseBridgeLarger'),
+            Object(name='nosebridgesmaller', title='NoseBridgeSmaller'),
+            Object(name='nosebulbsmall', title='NoseBulbSmaller'),
+            Object(name='nosehook', title='NoseHook'),
+            Object(name='noselonger', title='NoseLonger'),
+            Object(name='nosewider', title='NoseWider'),
+        ), None, False,
     )
-    HEAD = ('Head', (), (), False)
-    UPPERBODY = ('UpperBody', (), (), False)
 
-    def __init__(self, title, materials, phenomorphs, is_valid):
+    def __init__(self, title, materials, phenomorphs, specs, is_valid):
         self.title = title
         self.materials = materials
         self.phenomorphs = phenomorphs
+        self.specs = specs
         self.is_valid = is_valid
 
-    def get_material_name(self, title):
+    def get_material_name(self, title, is_optional=False):
         title = title.lower()
         for material in self.materials:
             if material.title.lower() == title:
                 return material.name
+        if is_optional and self != self.COMMON:
+            return self.COMMON.get_material_name(title)
         return None
 
-    def get_phenomorph_name(self, title):
+    def get_material_title(self, name, is_optional=False):
+        for material in self.materials:
+            if material.name == name:
+                return material.title
+        if is_optional and self != self.COMMON:
+            return self.COMMON.get_material_title(name)
+        return None
+
+    def get_phenomorph_name(self, title, is_optional=False):
         title = title.lower()
         for phenomorph in self.phenomorphs:
             if phenomorph.title.lower() == title:
                 return phenomorph.name
+        if is_optional and self != self.COMMON:
+            return self.COMMON.get_phenomorph_name(title)
         return None
 
-    def get_phenomorph_title(self, name):
+    def get_phenomorph_title(self, name, is_optional=False):
         for phenomorph in self.phenomorphs:
             if phenomorph.name == name:
                 return phenomorph.title
+        if is_optional and self != self.COMMON:
+            return self.COMMON.get_phenomorph_title(name)
         return None
 
 
@@ -90,12 +234,21 @@ class ExportSkuteBase:
         description='Also save a .style file',
         default=False,
     )
+    accoutrement: bpy.props.EnumProperty(
+        name='',
+        description='Item',
+        default=Accoutrement.HAIR.name,
+        items=[(a.name, a.title, f'Export the {a.title.lower()}') for a in Accoutrement if a.is_valid],
+    )
 
     def draw(self, context):
         layout = self.layout
         box = layout.box()
         box.label(text='Include')
         box.prop(self, 'save_style')
+        box = layout.box()
+        box.label(text='Item')
+        box.prop(self, 'accoutrement')
 
     def check(self, context):
         old_filepath = self.filepath
@@ -121,6 +274,7 @@ class ExportSkuteBase:
             pass
         preferences = context.preferences.addons[__package__].preferences
         self.save_style = preferences.save_style
+        self.accoutrement = bpy.context.window_manager.there_skute_accoutrements.accoutrement
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
@@ -130,7 +284,8 @@ class ExportSkuteBase:
             assert bpy.context.mode == 'OBJECT', 'Exporting must be done in Object Mode.'
             context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
-            self.skute = there.Skute(path=self.filepath)
+            self.data = Object()
+            self.data.skute = there.Skute(path=self.filepath)
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_armature = [o for o in bpy_scene.objects if o.parent is None and o.type == 'ARMATURE'][0]
@@ -138,17 +293,21 @@ class ExportSkuteBase:
                 raise RuntimeError('The armature object was not found.')
             for gender in Gender:
                 if gender.title.lower() == self.get_basename(bpy_armature.name).lower() and gender.length == round(bpy_armature.data.bones['Head'].length, 5):
-                    self.gender = gender
+                    self.data.gender = gender
                     break
             else:
                 raise RuntimeError('The gender could not be determined.')
             try:
-                bpy_object = [o for o in bpy_armature.children if o.type == 'EMPTY' and self.get_basename(o.name).lower() == self.accoutrement.title.lower()][0]
+                self.data.accoutrement = Accoutrement[self.accoutrement]
+            except KeyError:
+                raise RuntimeError('The item could not be determined.')
+            if not self.data.accoutrement.is_valid:
+                raise RuntimeError('The item is not valid.')
+            try:
+                bpy_object = [o for o in bpy_armature.children if o.type == 'EMPTY' and self.get_basename(o.name).lower() == self.data.accoutrement.title.lower()][0]
             except IndexError:
-                raise RuntimeError('The "%s" object was not found.' % self.accoutrement.title)
-            if not self.accoutrement.is_valid:
-                raise RuntimeError('The accoutrement is not valid.')
-            self.skute.skeleton = self.gender.skeleton
+                raise RuntimeError('The "%s" object was not found.' % self.data.accoutrement.title)
+            self.data.skute.skeleton = self.data.gender.skeleton
             self.gather_lods(bpy_armature, bpy_object)
             context.window_manager.progress_update(25)
             self.sort_lods()
@@ -159,7 +318,7 @@ class ExportSkuteBase:
             context.window_manager.progress_update(45)
             self.scale_skute()
             context.window_manager.progress_update(55)
-            self.skute.save()
+            self.data.skute.save()
             context.window_manager.progress_update(65)
             if self.save_style:
                 style = there.Style(path=os.path.splitext(self.filepath)[0] + '.style', items=self.create_style_items())
@@ -201,7 +360,7 @@ class ExportSkuteBase:
             )
             if bpy_lod.data.shape_keys is not None:
                 for bpy_shape in bpy_lod.data.shape_keys.key_blocks[1:]:
-                    name = self.accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name))
+                    name = self.data.accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name), is_optional=True)
                     if name is None:
                         continue
                     shape_normals = bpy_shape.normals_split_get()
@@ -216,10 +375,10 @@ class ExportSkuteBase:
             if bpy.app.version < (4, 1, 0):
                 bpy_lod.data.free_normals_split()
             for index, name in enumerate(bpy_lod.material_slots.keys()):
-                if name not in self.skute.materials:
-                    self.skute.materials[name] = there.Material(name=name)
+                if name not in self.data.skute.materials:
+                    self.data.skute.materials[name] = there.Material(name=name)
                 mesh = there.Mesh()
-                mesh.material = self.skute.materials[name]
+                mesh.material = self.data.skute.materials[name]
                 bpy_polygons = [p for p in bpy_lod.data.polygons if p.material_index == index]
                 if len(bpy_polygons) == 0:
                     continue
@@ -232,7 +391,7 @@ class ExportSkuteBase:
             lod.vertex_count += len(lod.vertices)
             for mesh in lod.meshes:
                 lod.face_count += len(mesh.indices) // 3
-            self.skute.lods.append(lod)
+            self.data.skute.lods.append(lod)
 
     def optimize_mesh(self, bpy_polygons, components, optimized):
         positions = components.positions
@@ -283,20 +442,31 @@ class ExportSkuteBase:
         return optimized_indices
 
     def sort_lods(self):
-        self.skute.lods.sort(key=operator.attrgetter('vertex_count'), reverse=True)
-        if len(self.skute.lods) != 3:
-            raise RuntimeError('"%s" should contain 3 LODs.' % self.accoutrement.title)
-        if self.accoutrement == Accoutrement.HAIR:
-            spec_distances = (15, 100, 1000)
-            spec_vertex_counts = (600, 450, 250)
-            spec_face_counts = (1100, 800, 450)
-            if self.gender == Gender.FEMALE:
-                spec_bounds = ((-0.35, 0.25, -0.35), (0.35, 1.2, 0.35))
+        self.data.skute.lods.sort(key=operator.attrgetter('vertex_count'), reverse=True)
+        if self.data.accoutrement.specs is None:
+            raise RuntimeError('"%s" is not configured.' % self.data.accoutrement.title)
+        # The below specs must match what the submission system is expecting
+        # They are designed to avoid exceeding the avatar memory usage and crashing the client
+        spec_lod_counts = self.data.accoutrement.specs.lod_counts
+        spec_distances = self.data.accoutrement.specs.distances
+        spec_vertex_counts = self.data.accoutrement.specs.vertex_counts
+        spec_face_counts = self.data.accoutrement.specs.face_counts
+        spec_bounds = self.data.accoutrement.specs.bounds[self.data.gender.index]
+        spec_bone = self.data.accoutrement.specs.bone
+        lod_count = len(self.data.skute.lods)
+        if lod_count < spec_lod_counts[0] or lod_count > spec_lod_counts[1]:
+            if spec_lod_counts[0] == spec_lod_counts[1]:
+                raise RuntimeError('"%s" should contain %s LODs.' % (
+                    self.data.accoutrement.title,
+                    spec_lod_counts[0],
+                ))
             else:
-                spec_bounds = ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35))
-        else:
-            raise RuntimeError('"%s" is not configured.' % self.accoutrement.title)
-        for index, lod in enumerate(self.skute.lods):
+                raise RuntimeError('"%s" should contain between %s and %s LODs.' % (
+                    self.data.accoutrement.title,
+                    spec_lod_counts[0],
+                    spec_lod_counts[1],
+                ))
+        for index, lod in enumerate(self.data.skute.lods):
             lod.index = index
             lod.distance = spec_distances[index]
             if lod.vertex_count > spec_vertex_counts[index]:
@@ -305,7 +475,7 @@ class ExportSkuteBase:
                 raise RuntimeError('LOD%s contains too many faces.' % index)
             if index < 2:
                 lod_phenomorphs = [p.name for p in lod.phenomorphs]
-                for phenomorph in self.accoutrement.phenomorphs:
+                for phenomorph in self.data.accoutrement.phenomorphs:
                     if phenomorph.name not in lod_phenomorphs:
                         raise RuntimeError('LOD%s should contain a "%s" shape key.' % (index, phenomorph.title))
             else:
@@ -316,6 +486,10 @@ class ExportSkuteBase:
             ]
             if False in [lod.bounds[0][i] >= spec_bounds[0][i] and lod.bounds[1][i] <= spec_bounds[1][i] for i in range(3)]:
                 raise RuntimeError('LOD%s is outside the bounding box.' % index)
+            if spec_bone is not None:
+                for vertex in lod.vertices:
+                    if len(vertex.bone_indices) != 1 or vertex.bone_indices[0] != spec_bone.index or vertex.bone_weight[0] != 1.0:
+                        raise RuntimeError('LOD%s must be entirely weighted to the "%s" bone' % (index, spec_bone.title))
             for phenomorph in lod.phenomorphs:
                 if len(phenomorph.deltas) == 0:
                     continue
@@ -324,14 +498,14 @@ class ExportSkuteBase:
                     [max([z[0].position[i] + z[1].position[i] for z in zip(lod.vertices, phenomorph.deltas)]) for i in range(3)],
                 ]
                 if False in [phenomorph.bounds[0][i] >= spec_bounds[0][i] and phenomorph.bounds[1][i] <= spec_bounds[1][i] for i in range(3)]:
-                    name = self.accoutrement.get_phenomorph_title(phenomorph.name)
+                    name = self.data.accoutrement.get_phenomorph_title(phenomorph.name, is_optional=True)
                     raise RuntimeError('LOD%s with "%s" shape is outside the bounding box.' % (index, name))
 
     def gather_materials(self):
-        self.skute.materials = list(self.skute.materials.values())
-        for index, material in enumerate(self.skute.materials):
+        self.data.skute.materials = list(self.data.skute.materials.values())
+        for index, material in enumerate(self.data.skute.materials):
             bpy_material = bpy.data.materials[material.name]
-            material.name = self.accoutrement.get_material_name(self.get_basename(bpy_material.name))
+            material.name = self.data.accoutrement.get_material_name(self.get_basename(bpy_material.name), is_optional=True)
             if material.name is None:
                 raise RuntimeError('Material "%s" is not supported.' % bpy_material.name)
             material.index = index
@@ -362,10 +536,10 @@ class ExportSkuteBase:
                 self.gather_diffuse_bsdf(bpy_material, bpy_link_node, material)
             else:
                 raise RuntimeError('Material "%s" configured with an unsupported %s node.' % (bpy_material.name, bpy_link_node.name))
-        for material in self.accoutrement.materials:
+        for material in self.data.accoutrement.materials:
             if material.name.startswith('fc_'):
                 continue
-            if len([m for m in self.skute.materials if m.name == material.name and m.texture is not None]) == 0:
+            if len([m for m in self.data.skute.materials if m.name == material.name and m.texture is not None]) == 0:
                 raise RuntimeError('Material "%s" is missing.' % (material.title))
 
     def gather_there_bsdf(self, bpy_material, bpy_there_node, material):
@@ -404,9 +578,9 @@ class ExportSkuteBase:
 
     def create_style_items(self):
         items = []
-        if self.accoutrement == Accoutrement.HAIR:
-            if self.gender == Gender.FEMALE:
-                item = there.Style.Item(kit_id=2007, skute=self.skute)
+        if self.data.accoutrement == Accoutrement.HAIR:
+            if self.data.gender == Gender.FEMALE:
+                item = there.Style.Item(kit_id=2007, skute=self.data.skute)
                 piece = there.Style.Piece(piece_id=2007, texture_id=22007)
                 item.pieces.append(piece)
                 items.append(item)
@@ -418,8 +592,8 @@ class ExportSkuteBase:
                 piece = there.Style.Piece(piece_id=1201, texture_id=11201)
                 item.pieces.append(piece)
                 items.append(item)
-            if self.gender == Gender.MALE:
-                item = there.Style.Item(kit_id=2507, skute=self.skute)
+            if self.data.gender == Gender.MALE:
+                item = there.Style.Item(kit_id=2507, skute=self.data.skute)
                 piece = there.Style.Piece(piece_id=2507, texture_id=12507)
                 item.pieces.append(piece)
                 items.append(item)
@@ -431,10 +605,12 @@ class ExportSkuteBase:
                 piece = there.Style.Piece(piece_id=1708, texture_id=11708)
                 item.pieces.append(piece)
                 items.append(item)
+        else:
+            raise RuntimeError('"%s" is not configured.' % self.data.accoutrement.title)  # TODO
         return items
 
     def normalize_weights(self):
-        for lod in self.skute.lods:
+        for lod in self.data.skute.lods:
             for vertex in lod.vertices:
                 values = sorted([v for v in zip(vertex.bone_indices, vertex.bone_weights) if v[0] >= 0 and v[1] > 0.0], key=lambda v: v[1], reverse=True)
                 total = sum([v[1] for v in values] + [0.0])
@@ -451,15 +627,15 @@ class ExportSkuteBase:
     def scale_skute(self):
         scales = [(s, pow(2.0, s - 32)) for s in range(32, 34)]
         try:
-            value = max([abs(v) for o in self.skute.lods for b in o.bounds for v in b])
+            value = max([abs(v) for o in self.data.skute.lods for b in o.bounds for v in b])
         except ValueError:
             value = 0.0
         try:
             scale = [s for s in scales if value <= s[1]][0]
         except IndexError:
             raise RuntimeError('The skute is too big to export.')
-        self.skute.scale = scale[0]
-        for lod in self.skute.lods:
+        self.data.skute.scale = scale[0]
+        for lod in self.data.skute.lods:
             for vertex in lod.vertices:
                 vertex.position = [v / scale[1] for v in vertex.position]
             for phenomorph in lod.phenomorphs:
@@ -521,7 +697,7 @@ class ExportSkuteBase:
                         bpy_lod.data.free_normals_split()
                     if bpy_lod.data.shape_keys is not None:
                         for bpy_shape in bpy_lod.data.shape_keys.key_blocks[1:]:
-                            name = accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name))
+                            name = accoutrement.get_phenomorph_name(self.get_basename(bpy_shape.name), is_optional=True)
                             if name is None:
                                 continue
                             stats_lod.shape_count += 1
@@ -567,7 +743,6 @@ class ExportSkute(bpy.types.Operator, ExportSkuteBase, ExportHelper):
         default='*.skute',
         options={'HIDDEN'},
     )
-    accoutrement = Accoutrement.HAIR
 
     @staticmethod
     def handle_menu_export(self, context):
@@ -585,6 +760,15 @@ class ExportSkutePreferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
         layout.prop(self, 'save_style')
+
+
+class ThereAccoutrementPropertyGroup(bpy.types.PropertyGroup):
+    accoutrement: bpy.props.EnumProperty(
+        name='',
+        description='Item',
+        default=Accoutrement.HAIR.name,
+        items=[(a.name, a.title, f'Focus on the {a.title.lower()}') for a in Accoutrement if a.is_valid],
+    )
 
 
 class ThereLODOperator(bpy.types.Operator):
@@ -702,6 +886,8 @@ class ThereOutlinerPanel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.label(text='Item')
+        layout.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
         layout.label(text='LODs')
         row = layout.row()
         for text in ['LOD0', 'LOD1', 'LOD2']:
@@ -709,7 +895,7 @@ class ThereOutlinerPanel(bpy.types.Panel):
         layout.label(text='Shape Keys')
         text = 'Basis'
         layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
-        for phenomorph in Accoutrement.HAIR.phenomorphs:
+        for phenomorph in Accoutrement.COMMON.phenomorphs:
             text = phenomorph.title
             layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
 
@@ -740,7 +926,8 @@ class ThereOutlinerPanel(bpy.types.Panel):
         bpy_armature = ThereOutlinerPanel.get_armature(context)
         if bpy_armature is None:
             return []
-        return [o for o in bpy_armature.children if o.type == 'EMPTY' and ThereOutlinerPanel.get_basename(o.name).lower() in [e.title.lower() for e in Accoutrement]]
+        accoutrement_titles = [e.title.lower() for e in Accoutrement if e.title is not None]
+        return [o for o in bpy_armature.children if o.type == 'EMPTY' and ThereOutlinerPanel.get_basename(o.name).lower() in accoutrement_titles]
 
     @staticmethod
     def get_lods(context):
@@ -758,10 +945,14 @@ class ThereOutlinerPanel(bpy.types.Panel):
     def set_active(context, bpy_lods, shape_id=None):
         for bpy_selected in context.selected_objects:
             bpy_selected.select_set(False)
+        try:
+            active_accoutrement = Accoutrement[bpy.context.window_manager.there_skute_accoutrements.accoutrement]
+        except KeyError:
+            return
         for bpy_lod in bpy_lods:
             if bpy_lod.hide_get():
                 continue
-            if ThereOutlinerPanel.get_basename(bpy_lod.parent.name).lower() != Accoutrement.HAIR.title.lower():
+            if ThereOutlinerPanel.get_basename(bpy_lod.parent.name).lower() != active_accoutrement.title.lower():
                 continue
             context.view_layer.objects.active = bpy_lod
             if shape_id is not None:
@@ -814,14 +1005,20 @@ class SkuteStatistics:
     @bpy.app.handlers.persistent
     def update(*args, **kwargs):
         cls = SkuteStatistics
-        if not bpy.context.window_manager.show_there_skute_stats:
+        if not bpy.context.window_manager.there_skute_show_stats:
             cls.rows = None
             return
         stats = ExportSkuteBase().get_stats()
         if stats is not None:
             locale.setlocale(locale.LC_ALL, '')
             cls.rows = []
+            try:
+                active_accoutrement = Accoutrement[bpy.context.window_manager.there_skute_accoutrements.accoutrement]
+            except KeyError:
+                return
             for accoutrement in stats.accoutrements:
+                if accoutrement.name != active_accoutrement.title:
+                    continue
                 cls.rows.append([[0, accoutrement.name]])
                 for lod in accoutrement.lods:
                     cls.rows.append([[10, lod.name]])
@@ -846,12 +1043,14 @@ class SkuteStatistics:
             return
         layout = self.layout
         layout.label(text='There Skute')
-        layout.prop(context.window_manager, 'show_there_skute_stats')
+        layout.prop(context.window_manager, 'there_skute_show_stats')
+        layout.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
 
 
 def register_exporter():
     bpy.utils.register_class(ExportSkute)
     bpy.utils.register_class(ExportSkutePreferences)
+    bpy.utils.register_class(ThereAccoutrementPropertyGroup)
     bpy.utils.register_class(ThereLODOperator)
     bpy.utils.register_class(ThereShapeKeyOperator)
     bpy.utils.register_class(ThereOutlinerPanel)
@@ -864,12 +1063,14 @@ def register_exporter():
     bpy.app.handlers.depsgraph_update_post.append(SkuteStatistics.update)
     SkuteStatistics.handler = bpy.types.SpaceView3D.draw_handler_add(SkuteStatistics.draw, tuple(), 'WINDOW', 'POST_PIXEL')
     bpy.types.VIEW3D_PT_overlay.append(SkuteStatistics.overlay_options)
-    bpy.types.WindowManager.show_there_skute_stats = bpy.props.BoolProperty(name='Statistics', default=True)
+    bpy.types.WindowManager.there_skute_show_stats = bpy.props.BoolProperty(name='Statistics', default=True)
+    bpy.types.WindowManager.there_skute_accoutrements = bpy.props.PointerProperty(type=ThereAccoutrementPropertyGroup)
 
 
 def unregister_exporter():
     bpy.utils.unregister_class(ExportSkute)
     bpy.utils.unregister_class(ExportSkutePreferences)
+    bpy.utils.unregister_class(ThereAccoutrementPropertyGroup)
     bpy.utils.unregister_class(ThereLODOperator)
     bpy.utils.unregister_class(ThereShapeKeyOperator)
     bpy.utils.unregister_class(ThereOutlinerPanel)
@@ -881,4 +1082,5 @@ def unregister_exporter():
     bpy.app.handlers.depsgraph_update_post.remove(SkuteStatistics.update)
     bpy.types.SpaceView3D.draw_handler_remove(SkuteStatistics.handler, 'WINDOW')
     bpy.types.VIEW3D_PT_overlay.remove(SkuteStatistics.overlay_options)
-    del bpy.types.WindowManager.show_there_skute_stats
+    del bpy.types.WindowManager.there_skute_show_stats
+    del bpy.types.WindowManager.there_skute_accoutrements

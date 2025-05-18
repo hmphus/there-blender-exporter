@@ -62,15 +62,16 @@ class ExportModelBase:
             assert bpy.context.mode == 'OBJECT', 'Exporting must be done in Object Mode.'
             context.window_manager.progress_begin(0, 100)
             context.window_manager.progress_update(0)
-            self.model = there.Model(path=self.filepath)
+            self.data = Object()
+            self.data.model = there.Model(path=self.filepath)
             try:
                 bpy_scene = bpy.data.scenes[bpy.context.scene.name]
                 bpy_node = [o for o in bpy_scene.objects if o.parent is None and o.type == 'EMPTY'][0]
             except IndexError:
                 raise RuntimeError('The root object was not found.')
             self.gather_node_properties(bpy_node)
-            self.model.nodes.append(self.gather_nodes(bpy_node))
-            assert self.model.nodes[0] is not None, 'The root object was not found.'
+            self.data.model.nodes.append(self.gather_nodes(bpy_node))
+            assert self.data.model.nodes[0] is not None, 'The root object was not found.'
             context.window_manager.progress_update(25)
             self.sort_nodes()
             context.window_manager.progress_update(35)
@@ -82,10 +83,10 @@ class ExportModelBase:
             context.window_manager.progress_update(65)
             self.scale_meshes()
             context.window_manager.progress_update(75)
-            self.model.save()
+            self.data.model.save()
             context.window_manager.progress_update(85)
             if self.save_preview:
-                there.Preview(path=os.path.splitext(self.filepath)[0] + '.preview', model=self.model).save()
+                there.Preview(path=os.path.splitext(self.filepath)[0] + '.preview', model=self.data.model).save()
             context.window_manager.progress_update(100)
         except (RuntimeError, AssertionError) as error:
             self.report({'ERROR'}, str(error))
@@ -101,7 +102,7 @@ class ExportModelBase:
         for i in range(1, 4):
             if distances[i - 1] >= distances[i]:
                 distances[i] = round(distances[i - 1] * 1.5)
-        self.model.lods = [there.LOD(index=i, distance=d) for i, d in enumerate(distances)]
+        self.data.model.lods = [there.LOD(index=i, distance=d) for i, d in enumerate(distances)]
 
     def gather_nodes(self, bpy_node, level=0, matrix_root_inverted=None):
         if bpy_node.type not in ['EMPTY', 'MESH']:
@@ -132,7 +133,7 @@ class ExportModelBase:
                         (min([v[1] for v in collision.vertices]) + max([v[1] for v in collision.vertices])) / 2.0,
                         (min([v[2] for v in collision.vertices]) + max([v[2] for v in collision.vertices])) / 2.0,
                     ]
-                    self.model.collision = collision
+                    self.data.model.collision = collision
                     return None
                 if len(bpy_node.material_slots) == 0:
                     self.report({'WARNING'}, 'Object "%s" is missing a material and will not be exported.' % bpy_node.name)
@@ -167,10 +168,10 @@ class ExportModelBase:
                     if bpy.app.version < (4, 1, 0):
                         bpy_node.data.free_normals_split()
                 for index, name in enumerate(bpy_node.material_slots.keys()):
-                    if name not in self.model.materials:
-                        self.model.materials[name] = there.Material(name=name)
+                    if name not in self.data.model.materials:
+                        self.data.model.materials[name] = there.Material(name=name)
                     mesh = there.Mesh()
-                    mesh.material = self.model.materials[name]
+                    mesh.material = self.data.model.materials[name]
                     bpy_polygons = [p for p in bpy_node.data.polygons if p.material_index == index]
                     if len(bpy_polygons) == 0:
                         continue
@@ -190,20 +191,20 @@ class ExportModelBase:
         return node
 
     def sort_nodes(self):
-        self.model.nodes[0].children.sort(key=operator.attrgetter('vertex_count'), reverse=True)
+        self.data.model.nodes[0].children.sort(key=operator.attrgetter('vertex_count'), reverse=True)
 
     def flatten_nodes(self, node=None, parent_index=0):
         if node is None:
-            node = self.model.nodes[0].children[0]
-        node.index = len(self.model.nodes)
+            node = self.data.model.nodes[0].children[0]
+        node.index = len(self.data.model.nodes)
         node.parent_index = parent_index
-        self.model.nodes.append(node)
+        self.data.model.nodes.append(node)
         for child in sorted(node.children, key=lambda n: self.get_basename(n.name)):
             self.flatten_nodes(child, node.index)
 
     def gather_materials(self):
-        self.model.materials = list(self.model.materials.values())
-        for index, material in enumerate(self.model.materials):
+        self.data.model.materials = list(self.data.model.materials.values())
+        for index, material in enumerate(self.data.model.materials):
             bpy_material = bpy.data.materials[material.name]
             material.index = index
             material.is_two_sided = not bpy_material.use_backface_culling
@@ -572,18 +573,18 @@ class ExportModelBase:
 
     def flatten_meshes(self, lod=None, node=None, node_index=None):
         if lod is None or node is None or node_index is None:
-            for lod in self.model.lods:
-                if lod.index >= len(self.model.nodes[0].children):
-                    self.model.lods = self.model.lods[:lod.index]
+            for lod in self.data.model.lods:
+                if lod.index >= len(self.data.model.nodes[0].children):
+                    self.data.model.lods = self.data.model.lods[:lod.index]
                     break
-                self.flatten_meshes(lod=lod, node=self.model.nodes[0].children[lod.index], node_index=1)
+                self.flatten_meshes(lod=lod, node=self.data.model.nodes[0].children[lod.index], node_index=1)
             return
-        assert node_index < len(self.model.nodes), 'LOD%s has too many nodes.' % lod.index
+        assert node_index < len(self.data.model.nodes), 'LOD%s has too many nodes.' % lod.index
         if node_index > 1:
-            if node.name != self.model.nodes[node_index].name:
+            if node.name != self.data.model.nodes[node_index].name:
                 self.report({'WARNING'}, 'LOD%s has a different name than LOD0 and may not animate correctly.' % lod.index)
         for mesh in node.meshes:
-            mesh.node = self.model.nodes[node_index]
+            mesh.node = self.data.model.nodes[node_index]
             lod.meshes.append(mesh)
         del node.meshes
         node_index += 1
@@ -593,7 +594,7 @@ class ExportModelBase:
 
     def scale_meshes(self):
         scales = [(s, pow(2.0, s - 32)) for s in range(33, 64)]
-        for lod in self.model.lods:
+        for lod in self.data.model.lods:
             try:
                 value = max([max([max([abs(p) for p in v.position]) for v in m.vertices]) for m in lod.meshes])
             except ValueError:
