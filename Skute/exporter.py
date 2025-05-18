@@ -81,7 +81,8 @@ class Accoutrement(enum.Enum):
             Object(name='hair_wedge', title='Wedge'),
             Object(name='hair_pyramid', title='Pyramid'),
             Object(name='hair_eyesapart', title='EyesApart'),
-        ), Object(
+        ),
+        Object(
             lod_counts=(3, 3),
             distances=(15, 100, 1000),
             vertex_counts=(600, 450, 250),
@@ -91,6 +92,29 @@ class Accoutrement(enum.Enum):
                 ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
             ),
             bone=None,
+        ), (
+            Object(skute_index=0, items=(
+                Object(kit_id=2007, pieces=(
+                    Object(piece_id=2007, texture_id=22007),
+                )),
+                Object(kit_id=900, pieces=(
+                    Object(piece_id=900, texture_id=30900),
+                )),
+                Object(kit_id=1201, pieces=(
+                    Object(piece_id=1201, texture_id=11201),
+                )),
+            )),
+            Object(skute_index=0, items=(
+                Object(kit_id=2507, pieces=(
+                    Object(piece_id=2507, texture_id=12507),
+                )),
+                Object(kit_id=901, pieces=(
+                    Object(piece_id=901, texture_id=30901),
+                )),
+                Object(kit_id=1708, pieces=(
+                    Object(piece_id=1708, texture_id=11708),
+                )),
+            )),
         ), True,
     )
     EARRINGS = (
@@ -102,7 +126,8 @@ class Accoutrement(enum.Enum):
             Object(name='tall', title='Tall'),
             Object(name='wedge', title='Wedge'),
             Object(name='pyramid', title='Pyramid'),
-        ), Object(
+        ),
+        Object(
             lod_counts=(2, 3),
             distances=(15, 100, 1000),
             vertex_counts=(450, 250, 200),
@@ -112,7 +137,7 @@ class Accoutrement(enum.Enum):
                 ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
             ),
             bone=Bone.HEAD,
-        ), False,
+        ), None, True,  # TODO
     )
     GLASSES = (
         'Glasses', (
@@ -123,7 +148,8 @@ class Accoutrement(enum.Enum):
             Object(name='tall', title='Tall'),
             Object(name='wedge', title='Wedge'),
             Object(name='pyramid', title='Pyramid'),
-        ), Object(
+        ),
+        Object(
             lod_counts=(2, 3),
             distances=(15, 100, 1000),
             vertex_counts=(450, 250, 200),
@@ -133,10 +159,10 @@ class Accoutrement(enum.Enum):
                 ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
             ),
             bone=Bone.HEAD,
-        ), False,
+        ), None, True,  # TODO
     )
-    HEAD = ('Head', (), (), None, False)
-    UPPERBODY = ('UpperBody', (), (), None, False)
+    HEAD = ('Head', (), (), None, None, False)
+    UPPERBODY = ('UpperBody', (), (), None, None, False)
     COMMON = (
         None, (
             Object(name='fc_hairscrunchy', title='HairScrunchy'),
@@ -183,14 +209,15 @@ class Accoutrement(enum.Enum):
             Object(name='nosehook', title='NoseHook'),
             Object(name='noselonger', title='NoseLonger'),
             Object(name='nosewider', title='NoseWider'),
-        ), None, False,
+        ), None, None, False,
     )
 
-    def __init__(self, title, materials, phenomorphs, specs, is_valid):
+    def __init__(self, title, materials, phenomorphs, specs, kits, is_valid):
         self.title = title
         self.materials = materials
         self.phenomorphs = phenomorphs
         self.specs = specs
+        self.kits = kits
         self.is_valid = is_valid
 
     def get_material_name(self, title, is_optional=False):
@@ -577,36 +604,19 @@ class ExportSkuteBase:
         return None
 
     def create_style_items(self):
+        kits = self.data.accoutrement.kits
+        if kits is None:
+            raise RuntimeError('"%s" is not configured.' % self.data.accoutrement.title)
+        kit = kits[self.data.gender.index]
         items = []
-        if self.data.accoutrement == Accoutrement.HAIR:
-            if self.data.gender == Gender.FEMALE:
-                item = there.Style.Item(kit_id=2007, skute=self.data.skute)
-                piece = there.Style.Piece(piece_id=2007, texture_id=22007)
+        for index, kit_item in enumerate(kit.items):
+            item = there.Style.Item(kit_id=kit_item.kit_id)
+            if index == kit.skute_index:
+                item.skute = self.data.skute
+            for kit_piece in kit_item.pieces:
+                piece = there.Style.Piece(piece_id=kit_piece.piece_id, texture_id=kit_piece.texture_id)
                 item.pieces.append(piece)
-                items.append(item)
-                item = there.Style.Item(kit_id=900)
-                piece = there.Style.Piece(piece_id=900, texture_id=30900)
-                item.pieces.append(piece)
-                items.append(item)
-                item = there.Style.Item(kit_id=1201)
-                piece = there.Style.Piece(piece_id=1201, texture_id=11201)
-                item.pieces.append(piece)
-                items.append(item)
-            if self.data.gender == Gender.MALE:
-                item = there.Style.Item(kit_id=2507, skute=self.data.skute)
-                piece = there.Style.Piece(piece_id=2507, texture_id=12507)
-                item.pieces.append(piece)
-                items.append(item)
-                item = there.Style.Item(kit_id=901)
-                piece = there.Style.Piece(piece_id=901, texture_id=30901)
-                item.pieces.append(piece)
-                items.append(item)
-                item = there.Style.Item(kit_id=1708)
-                piece = there.Style.Piece(piece_id=1708, texture_id=11708)
-                item.pieces.append(piece)
-                items.append(item)
-        else:
-            raise RuntimeError('"%s" is not configured.' % self.data.accoutrement.title)  # TODO
+            items.append(item)
         return items
 
     def normalize_weights(self):
@@ -974,6 +984,7 @@ class ThereOutlinerPanel(bpy.types.Panel):
 class SkuteStatistics:
     handler = None
     rows = None
+    active = None
 
     @classmethod
     def draw(cls):
@@ -1000,11 +1011,23 @@ class SkuteStatistics:
     def init(*args, **kwargs):
         cls = SkuteStatistics
         cls.rows = None
+        cls.active = None
 
     @staticmethod
     @bpy.app.handlers.persistent
     def update(*args, **kwargs):
         cls = SkuteStatistics
+        if cls.active != bpy.context.view_layer.objects.active:
+            cls.active = bpy.context.view_layer.objects.active
+            active = cls.active
+            if active is not None and active.type == 'MESH':
+                active = active.parent
+            if active is not None and active.type == 'EMPTY' and active.parent is not None and active.parent.type == 'ARMATURE':
+                title = active.name.lower()
+                for accoutrement in Accoutrement:
+                    if accoutrement.is_valid and accoutrement.title.lower() == title:
+                        bpy.context.window_manager.there_skute_accoutrements.accoutrement = accoutrement.name
+                        break
         if not bpy.context.window_manager.there_skute_show_stats:
             cls.rows = None
             return
