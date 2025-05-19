@@ -126,6 +126,8 @@ class Accoutrement(enum.Enum):
             Object(name='tall', title='Tall'),
             Object(name='wedge', title='Wedge'),
             Object(name='pyramid', title='Pyramid'),
+            Object(name='earswider', title='EarsWider'),
+            Object(name='eyesapart', title='EyesApart'),
         ),
         Object(
             lod_counts=(2, 3),
@@ -177,6 +179,8 @@ class Accoutrement(enum.Enum):
             Object(name='tall', title='Tall'),
             Object(name='wedge', title='Wedge'),
             Object(name='pyramid', title='Pyramid'),
+            Object(name='eyesapart', title='EyesApart'),
+            Object(name='nosebridgelarger', title='NoseBridgeLarger'),
         ),
         Object(
             lod_counts=(2, 3),
@@ -953,6 +957,12 @@ class ThereOutlinerPanel(bpy.types.Panel):
     previews = None
 
     def draw(self, context):
+        shapes = set()
+        bpy_lods = [b for b in self.get_lods(context) if b.data.shape_keys is not None and not b.hide_get()]
+        for bpy_lod in bpy_lods:
+            for shape_key in bpy_lod.data.shape_keys.key_blocks:
+                name = shape_key.name.lower()
+                shapes.add(name)
         layout = self.layout
         layout.label(text='Item')
         layout.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
@@ -960,10 +970,22 @@ class ThereOutlinerPanel(bpy.types.Panel):
         row = layout.row()
         for text in ['LOD0', 'LOD1', 'LOD2']:
             row.operator(ThereLODOperator.bl_idname, text=text, depress=ThereLODOperator.is_depressed(context, text)).id = text
-        layout.label(text='Shape Keys')
+        row = layout.row()
+        row.label(text='Shape Keys')
+        row.prop(context.window_manager, 'there_skute_optional_shapes')
         text = 'Basis'
         layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
-        for phenomorph in Accoutrement.COMMON.phenomorphs:
+        phenomorphs = Accoutrement.COMMON.phenomorphs
+        if not context.window_manager.there_skute_optional_shapes:
+            try:
+                active_accoutrement = Accoutrement[context.window_manager.there_skute_accoutrements.accoutrement]
+            except KeyError:
+                active_accoutrement = None
+            if active_accoutrement is not None:
+                phenomorphs = active_accoutrement.phenomorphs
+        for phenomorph in phenomorphs:
+            if phenomorph.title.lower() not in shapes:
+                continue
             text = phenomorph.title
             layout.operator(ThereShapeKeyOperator.bl_idname, text=text, depress=ThereShapeKeyOperator.is_depressed(context, text)).id = text
 
@@ -1086,7 +1108,7 @@ class SkuteStatistics:
                     if accoutrement.is_valid and accoutrement.title.lower() == title:
                         bpy.context.window_manager.there_skute_accoutrements.accoutrement = accoutrement.name
                         break
-        if not bpy.context.window_manager.there_skute_show_stats:
+        if not bpy.context.window_manager.there_skute_stats:
             cls.rows = None
             return
         stats = ExportSkuteBase().get_stats()
@@ -1124,8 +1146,9 @@ class SkuteStatistics:
             return
         layout = self.layout
         layout.label(text='There Skute')
-        layout.prop(context.window_manager, 'there_skute_show_stats')
-        layout.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
+        row = layout.row()
+        row.prop(context.window_manager, 'there_skute_stats')
+        row.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
 
 
 def register_exporter():
@@ -1144,7 +1167,8 @@ def register_exporter():
     bpy.app.handlers.depsgraph_update_post.append(SkuteStatistics.update)
     SkuteStatistics.handler = bpy.types.SpaceView3D.draw_handler_add(SkuteStatistics.draw, tuple(), 'WINDOW', 'POST_PIXEL')
     bpy.types.VIEW3D_PT_overlay.append(SkuteStatistics.overlay_options)
-    bpy.types.WindowManager.there_skute_show_stats = bpy.props.BoolProperty(name='Statistics', default=True)
+    bpy.types.WindowManager.there_skute_stats = bpy.props.BoolProperty(name='Statistics', default=True)
+    bpy.types.WindowManager.there_skute_optional_shapes = bpy.props.BoolProperty(name='Optional', default=True)
     bpy.types.WindowManager.there_skute_accoutrements = bpy.props.PointerProperty(type=ThereAccoutrementPropertyGroup)
 
 
@@ -1163,5 +1187,6 @@ def unregister_exporter():
     bpy.app.handlers.depsgraph_update_post.remove(SkuteStatistics.update)
     bpy.types.SpaceView3D.draw_handler_remove(SkuteStatistics.handler, 'WINDOW')
     bpy.types.VIEW3D_PT_overlay.remove(SkuteStatistics.overlay_options)
-    del bpy.types.WindowManager.there_skute_show_stats
+    del bpy.types.WindowManager.there_skute_stats
+    del bpy.types.WindowManager.there_skute_optional_shapes
     del bpy.types.WindowManager.there_skute_accoutrements

@@ -778,7 +778,7 @@ class ModelStatistics:
     @bpy.app.handlers.persistent
     def update(*args, **kwargs):
         cls = ModelStatistics
-        if not bpy.context.window_manager.show_there_model_stats:
+        if not bpy.context.window_manager.there_model_stats:
             cls.rows = None
             return
         stats = ExportModelBase().get_stats()
@@ -813,7 +813,7 @@ class ModelStatistics:
             return
         layout = self.layout
         layout.label(text='There Model')
-        layout.prop(context.window_manager, 'show_there_model_stats')
+        layout.prop(context.window_manager, 'there_model_stats')
 
 
 def register_exporter():
@@ -825,7 +825,7 @@ def register_exporter():
     bpy.app.handlers.depsgraph_update_post.append(ModelStatistics.update)
     ModelStatistics.handler = bpy.types.SpaceView3D.draw_handler_add(ModelStatistics.draw, tuple(), 'WINDOW', 'POST_PIXEL')
     bpy.types.VIEW3D_PT_overlay.append(ModelStatistics.overlay_options)
-    bpy.types.WindowManager.show_there_model_stats = bpy.props.BoolProperty(name='Statistics', default=True)
+    bpy.types.WindowManager.there_model_stats = bpy.props.BoolProperty(name='Statistics', default=True)
 
 
 def unregister_exporter():
@@ -837,4 +837,4 @@ def unregister_exporter():
     bpy.app.handlers.depsgraph_update_post.remove(ModelStatistics.update)
     bpy.types.SpaceView3D.draw_handler_remove(ModelStatistics.handler, 'WINDOW')
     bpy.types.VIEW3D_PT_overlay.remove(ModelStatistics.overlay_options)
-    del bpy.types.WindowManager.show_there_model_stats
+    del bpy.types.WindowManager.there_model_stats
