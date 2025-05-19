@@ -137,7 +137,36 @@ class Accoutrement(enum.Enum):
                 ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
             ),
             bone=Bone.HEAD,
-        ), None, True,  # TODO
+        ), (
+            Object(skute_index=1, items=(
+                Object(kit_id=2001, pieces=(
+                    Object(piece_id=2001, texture_id=12001),
+                )),
+                Object(kit_id=2151, pieces=(
+                    Object(piece_id=2151, texture_id=22151),
+                )),
+                Object(kit_id=900, pieces=(
+                    Object(piece_id=900, texture_id=30900),
+                )),
+                Object(kit_id=1201, pieces=(
+                    Object(piece_id=1201, texture_id=11201),
+                )),
+            )),
+            Object(skute_index=1, items=(
+                Object(kit_id=2501, pieces=(
+                    Object(piece_id=2501, texture_id=12501),
+                )),
+                Object(kit_id=2651, pieces=(
+                    Object(piece_id=2651, texture_id=12651),
+                )),
+                Object(kit_id=901, pieces=(
+                    Object(piece_id=901, texture_id=30901),
+                )),
+                Object(kit_id=1708, pieces=(
+                    Object(piece_id=1708, texture_id=11708),
+                )),
+            )),
+        ), True,
     )
     GLASSES = (
         'Glasses', (
@@ -159,7 +188,36 @@ class Accoutrement(enum.Enum):
                 ((-0.35, 0.25, -0.35), (0.35, 1.45, 0.35)),
             ),
             bone=Bone.HEAD,
-        ), None, True,  # TODO
+        ), (
+            Object(skute_index=1, items=(
+                Object(kit_id=2001, pieces=(
+                    Object(piece_id=2001, texture_id=12001),
+                )),
+                Object(kit_id=2111, pieces=(
+                    Object(piece_id=2111, texture_id=22111),
+                )),
+                Object(kit_id=900, pieces=(
+                    Object(piece_id=900, texture_id=30900),
+                )),
+                Object(kit_id=1201, pieces=(
+                    Object(piece_id=1201, texture_id=11201),
+                )),
+            )),
+            Object(skute_index=1, items=(
+                Object(kit_id=2501, pieces=(
+                    Object(piece_id=2501, texture_id=12501),
+                )),
+                Object(kit_id=2611, pieces=(
+                    Object(piece_id=2611, texture_id=22611),
+                )),
+                Object(kit_id=901, pieces=(
+                    Object(piece_id=901, texture_id=30901),
+                )),
+                Object(kit_id=1708, pieces=(
+                    Object(piece_id=1708, texture_id=11708),
+                )),
+            )),
+        ), True,
     )
     HEAD = ('Head', (), (), None, None, False)
     UPPERBODY = ('UpperBody', (), (), None, None, False)
@@ -515,7 +573,7 @@ class ExportSkuteBase:
                 raise RuntimeError('LOD%s is outside the bounding box.' % index)
             if spec_bone is not None:
                 for vertex in lod.vertices:
-                    if len(vertex.bone_indices) != 1 or vertex.bone_indices[0] != spec_bone.index or vertex.bone_weight[0] != 1.0:
+                    if len(vertex.bone_indices) != 1 or vertex.bone_indices[0] != spec_bone.index or vertex.bone_weights[0] != 1.0:
                         raise RuntimeError('LOD%s must be entirely weighted to the "%s" bone' % (index, spec_bone.title))
             for phenomorph in lod.phenomorphs:
                 if len(phenomorph.deltas) == 0:
