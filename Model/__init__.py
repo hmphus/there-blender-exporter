@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'There Model format',
     'author': 'Brian Gontowski',
-    'version': (1, 2, 8),
+    'version': (1, 3, 0),
     'blender': (3, 1, 0),
     'location': 'File > Import-Export',
     'description': 'Export as Model for There.com',
