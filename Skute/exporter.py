@@ -325,7 +325,7 @@ class ExportSkuteBase:
     )
     accoutrement: bpy.props.EnumProperty(
         name='',
-        description='Item',
+        description='Category',
         default=Accoutrement.HAIR.name,
         items=[(a.name, a.title, f'Export the {a.title.lower()}') for a in Accoutrement if a.is_valid],
     )
@@ -336,7 +336,7 @@ class ExportSkuteBase:
         box.label(text='Include')
         box.prop(self, 'save_style')
         box = layout.box()
-        box.label(text='Item')
+        box.label(text='Category')
         box.prop(self, 'accoutrement')
 
     def check(self, context):
@@ -837,7 +837,7 @@ class ExportSkutePreferences(bpy.types.AddonPreferences):
 class ThereAccoutrementPropertyGroup(bpy.types.PropertyGroup):
     accoutrement: bpy.props.EnumProperty(
         name='',
-        description='Item',
+        description='Category',
         default=Accoutrement.HAIR.name,
         items=[(a.name, a.title, f'Focus on the {a.title.lower()}') for a in Accoutrement if a.is_valid],
     )
@@ -964,7 +964,7 @@ class ThereOutlinerPanel(bpy.types.Panel):
                 name = shape_key.name.lower()
                 shapes.add(name)
         layout = self.layout
-        layout.label(text='Item')
+        layout.label(text='Category')
         layout.prop(context.window_manager.there_skute_accoutrements, 'accoutrement')
         layout.label(text='LODs')
         row = layout.row()
